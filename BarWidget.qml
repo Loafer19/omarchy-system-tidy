@@ -67,12 +67,29 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "🧹"
-    labelVisible: true
+    text: ""
+    labelVisible: false
     hasVisualContent: true
+    fixedWidth: Style.bar.iconSlot
     horizontalMargin: 8.75
     verticalPadding: 8.75
+    tooltipText: "System Tidy"
 
     onPressed: function(b) { root.toggle() }
+
+    // MDI "broom" glyph (broom.svg, Apache-2.0), pre-tinted to the bar's
+    // foreground (#A9B1D6, sampled from the neighboring icons) rather than
+    // recolored at runtime — one less moving part than a shader effect.
+    Image {
+      id: icon
+      anchors.centerIn: parent
+      width: Style.space(16)
+      height: Style.space(16)
+      source: Qt.resolvedUrl("broom.svg")
+      sourceSize.width: width * 2
+      sourceSize.height: height * 2
+      fillMode: Image.PreserveAspectFit
+      smooth: true
+    }
   }
 }
