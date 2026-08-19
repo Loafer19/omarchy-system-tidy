@@ -260,8 +260,8 @@ Panel {
           anchors.centerIn: parent
           visible: root.activeTab === "packages" && root.packages.length === 0
           text: root.packagesFilter === "orphans"
-            ? "No orphaned packages."
-            : "No packages beyond the Omarchy defaults."
+            ? "No orphaned packages"
+            : "No packages beyond the Omarchy defaults"
           color: Qt.darker(root.contentForeground, 1.5)
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
@@ -319,7 +319,7 @@ Panel {
         Text {
           anchors.centerIn: parent
           visible: root.activeTab === "webapps" && root.webapps.length === 0
-          text: "No webapp launchers installed."
+          text: "No webapp launchers installed"
           color: Qt.darker(root.contentForeground, 1.5)
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
@@ -386,6 +386,15 @@ Panel {
           }
         }
 
+        Text {
+          anchors.centerIn: parent
+          visible: root.activeTab === "autostart" && root.autostartItems.length === 0
+          text: "No autostart entries found"
+          color: Qt.darker(root.contentForeground, 1.5)
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body
+        }
+
         ListView {
           anchors.fill: parent
           visible: root.activeTab === "cleanup"
@@ -445,7 +454,9 @@ Panel {
               width: Style.space(72)
               height: Style.space(26)
               radius: Style.cornerRadius
-              color: cleanMouse.containsMouse ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.14) : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
+              color: cleanMouse.containsMouse
+                ? (modelData.action === "view" ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.14) : Qt.rgba(0.8, 0.2, 0.2, 0.25))
+                : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
 
               Text {
                 anchors.centerIn: parent
@@ -534,7 +545,7 @@ Panel {
 
   Timer {
     id: statusClearTimer
-    interval: 4000
+    interval: 2000
     onTriggered: root.statusText = ""
   }
 }
