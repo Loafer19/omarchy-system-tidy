@@ -21,6 +21,7 @@ Panel {
   readonly property string backendPath: String(Qt.resolvedUrl("scripts/backend.sh")).replace(/^file:\/\//, "")
 
   property string activeTab: "packages"
+  property string packagesFilter: "extra"
   property var packages: []
   property var webapps: []
   property var autostartItems: []
@@ -54,6 +55,12 @@ Panel {
     root.statusText = message
     actionProc.command = ["bash", root.backendPath].concat(args)
     actionProc.running = true
+  }
+
+  function setPackagesFilter(key) {
+    if (root.packagesFilter === key) return
+    root.packagesFilter = key
+    packagesProc.running = true
   }
 
   function removePackage(name) { runAction(["packages-remove", name], "Removing " + name + "…") }
@@ -139,8 +146,58 @@ Panel {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 
+        Row {
+          id: packagesFilterRow
+          visible: root.activeTab === "packages"
+          anchors.top: parent.top
+          anchors.left: parent.left
+          height: Style.space(24)
+          spacing: Style.space(6)
+
+          Repeater {
+            model: [
+              { key: "extra", label: "Extra" },
+              { key: "orphans", label: "Orphans" }
+            ]
+
+            Rectangle {
+              required property var modelData
+              readonly property bool selected: root.packagesFilter === modelData.key
+              width: filterLabel.implicitWidth + Style.space(16)
+              height: Style.space(24)
+              radius: Style.cornerRadius
+              color: selected
+                ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.14)
+                : (filterMouse.containsMouse ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.06) : "transparent")
+              border.width: selected ? 0 : Style.spacing.hairline
+              border.color: root.dividerColor
+
+              Text {
+                id: filterLabel
+                anchors.centerIn: parent
+                text: modelData.label
+                color: selected ? root.contentForeground : Qt.darker(root.contentForeground, 1.4)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              MouseArea {
+                id: filterMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.setPackagesFilter(modelData.key)
+              }
+            }
+          }
+        }
+
         ListView {
-          anchors.fill: parent
+          anchors.top: packagesFilterRow.bottom
+          anchors.topMargin: Style.space(6)
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.bottom: parent.bottom
           visible: root.activeTab === "packages"
           clip: true
           model: root.packages
@@ -202,7 +259,9 @@ Panel {
         Text {
           anchors.centerIn: parent
           visible: root.activeTab === "packages" && root.packages.length === 0
-          text: "No packages beyond the Omarchy defaults."
+          text: root.packagesFilter === "orphans"
+            ? "No orphaned packages."
+            : "No packages beyond the Omarchy defaults."
           color: Qt.darker(root.contentForeground, 1.5)
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
@@ -390,7 +449,7 @@ Panel {
 
   Process {
     id: packagesProc
-    command: ["bash", root.backendPath, "packages-list"]
+    command: ["bash", root.backendPath, root.packagesFilter === "orphans" ? "packages-orphans" : "packages-list"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.packages = Model.parsePackages(text)

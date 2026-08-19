@@ -8,17 +8,26 @@ defaults_set() {
   grep -hvE '^\s*#|^\s*$' "$BASE_LIST" "$OTHER_LIST" 2>/dev/null | sort -u
 }
 
-packages_list() {
-  local defaults installed
-  defaults=$(defaults_set)
-  installed=$(pacman -Qeq | sort -u)
-  comm -23 <(echo "$installed") <(echo "$defaults") | while read -r pkg; do
+describe_packages() {
+  while read -r pkg; do
     [ -z "$pkg" ] && continue
     local size date
     size=$(expac -H M '%m' "$pkg" 2>/dev/null || echo "0")
     date=$(grep -a "installed $pkg " /var/log/pacman.log 2>/dev/null | tail -1 | cut -d']' -f1 | tr -d '[' | cut -dT -f1)
     printf '%s\t%s\t%s\n' "$pkg" "${size:-0}" "${date:-unknown}"
   done
+  return 0
+}
+
+packages_list() {
+  local defaults installed
+  defaults=$(defaults_set)
+  installed=$(pacman -Qeq | sort -u)
+  comm -23 <(echo "$installed") <(echo "$defaults") | describe_packages
+}
+
+packages_orphans() {
+  (pacman -Qtdq 2>/dev/null || true) | sort -u | describe_packages
 }
 
 packages_remove() {
@@ -27,8 +36,8 @@ packages_remove() {
 }
 
 webapps_list() {
-  grep -l "Exec=omarchy-launch-webapp\|Exec=omarchy-webapp-handler" "$HOME/.local/share/applications/"*.desktop 2>/dev/null \
-    | while read -r f; do basename "$f" .desktop; done | sort
+  (grep -l "Exec=omarchy-launch-webapp\|Exec=omarchy-webapp-handler" "$HOME/.local/share/applications/"*.desktop 2>/dev/null || true) \
+    | (while read -r f; do basename "$f" .desktop; done; true) | sort
 }
 
 webapps_remove() {
@@ -139,6 +148,7 @@ cmd="${1:-}"
 shift || true
 case "$cmd" in
   packages-list) packages_list ;;
+  packages-orphans) packages_orphans ;;
   packages-remove) packages_remove "$@" ;;
   webapps-list) webapps_list ;;
   webapps-remove) webapps_remove "$@" ;;
