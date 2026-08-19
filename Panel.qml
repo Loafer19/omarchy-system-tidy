@@ -221,7 +221,7 @@ Panel {
                 font.bold: true
               }
               Text {
-                text: Model.formatMib(modelData.sizeMb) + " · installed " + modelData.date
+                text: Model.formatMib(modelData.sizeMb) + " · installed " + modelData.date + " · used " + modelData.lastUsed
                 color: Qt.darker(root.contentForeground, 1.5)
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.caption

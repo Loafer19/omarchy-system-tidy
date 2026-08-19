@@ -15,7 +15,7 @@ function parseTsvRows(text, fieldNames) {
 }
 
 function parsePackages(text) {
-  var rows = parseTsvRows(text, ["name", "sizeMb", "date"])
+  var rows = parseTsvRows(text, ["name", "sizeMb", "date", "lastUsed"])
   rows.sort(function(a, b) { return parseFloat(b.sizeMb) - parseFloat(a.sizeMb) })
   return rows
 }

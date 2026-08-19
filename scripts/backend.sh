@@ -8,13 +8,29 @@ defaults_set() {
   grep -hvE '^\s*#|^\s*$' "$BASE_LIST" "$OTHER_LIST" 2>/dev/null | sort -u
 }
 
+package_last_used() {
+  local pkg="$1"
+  local newest=0 atime f
+  while IFS= read -r f; do
+    [ -f "$f" ] || continue
+    atime=$(stat -c %X "$f" 2>/dev/null || echo 0)
+    [ "$atime" -gt "$newest" ] && newest=$atime
+  done < <(pacman -Ql "$pkg" 2>/dev/null | awk '{print $2}' | grep -E '/s?bin/')
+
+  [ "$newest" -eq 0 ] && { echo "n/a"; return; }
+
+  local days=$(( ($(date +%s) - newest) / 86400 ))
+  [ "$days" -le 0 ] && echo "today" || echo "${days}d ago"
+}
+
 describe_packages() {
   while read -r pkg; do
     [ -z "$pkg" ] && continue
-    local size date
+    local size date used
     size=$(expac -H M '%m' "$pkg" 2>/dev/null || echo "0")
     date=$(grep -a "installed $pkg " /var/log/pacman.log 2>/dev/null | tail -1 | cut -d']' -f1 | tr -d '[' | cut -dT -f1)
-    printf '%s\t%s\t%s\n' "$pkg" "${size:-0}" "${date:-unknown}"
+    used=$(package_last_used "$pkg")
+    printf '%s\t%s\t%s\t%s\n' "$pkg" "${size:-0}" "${date:-unknown}" "$used"
   done
   return 0
 }
