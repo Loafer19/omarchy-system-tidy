@@ -24,7 +24,7 @@ Panel {
   property var packages: []
   property var webapps: []
   property var autostartItems: []
-  property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0 })
+  property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, journal: 0 })
   property bool busy: false
   property string statusText: ""
 
@@ -336,7 +336,10 @@ Panel {
             model: [
               { key: "pacman", label: "Pacman cache" },
               { key: "coredump", label: "Coredumps" },
-              { key: "trash", label: "Trash" }
+              { key: "trash", label: "Trash" },
+              { key: "docker", label: "Docker (prune)" },
+              { key: "browser", label: "Browser cache" },
+              { key: "journal", label: "Journal logs" }
             ]
 
             Rectangle {

@@ -77,14 +77,50 @@ dir_size_mb() {
   du -sm "$1" 2>/dev/null | cut -f1 || true
 }
 
+docker_size_mb() {
+  command -v docker >/dev/null 2>&1 || { echo 0; return; }
+  docker system df --format '{{.Size}}' 2>/dev/null | awk '
+    {
+      v = $0
+      unit = substr(v, length(v) - 1, 2)
+      if (unit == "GB") { total += substr(v, 1, length(v) - 2) * 1024 }
+      else if (unit == "MB") { total += substr(v, 1, length(v) - 2) }
+      else if (unit == "kB" || unit == "KB") { total += substr(v, 1, length(v) - 2) / 1024 }
+      else if (substr(v, length(v), 1) == "B") { total += substr(v, 1, length(v) - 1) / 1024 / 1024 }
+    }
+    END { printf "%.0f", total + 0 }
+  ' || echo 0
+}
+
+browser_cache_mb() {
+  local total=0 d size
+  for d in "$HOME/.cache/google-chrome" "$HOME/.cache/chromium"; do
+    size=$(dir_size_mb "$d")
+    total=$((total + ${size:-0}))
+  done
+  echo "$total"
+}
+
+journal_size_mb() {
+  journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMG]' | head -1 | awk '
+    {
+      unit = substr($0, length($0), 1)
+      num = substr($0, 1, length($0) - 1)
+      if (unit == "G") print num * 1024
+      else if (unit == "M") print num
+      else if (unit == "K") print num / 1024
+      else print 0
+    }
+  '
+}
+
 cleanup_status() {
-  local pacman_cache coredump trash
-  pacman_cache=$(dir_size_mb /var/cache/pacman/pkg/)
-  coredump=$(dir_size_mb /var/lib/systemd/coredump/)
-  trash=$(dir_size_mb "$HOME/.local/share/Trash/")
-  printf 'pacman\t%s\n' "${pacman_cache:-0}"
-  printf 'coredump\t%s\n' "${coredump:-0}"
-  printf 'trash\t%s\n' "${trash:-0}"
+  printf 'pacman\t%s\n' "$(dir_size_mb /var/cache/pacman/pkg/)"
+  printf 'coredump\t%s\n' "$(dir_size_mb /var/lib/systemd/coredump/)"
+  printf 'trash\t%s\n' "$(dir_size_mb "$HOME/.local/share/Trash/")"
+  printf 'docker\t%s\n' "$(docker_size_mb)"
+  printf 'browser\t%s\n' "$(browser_cache_mb)"
+  printf 'journal\t%s\n' "$(journal_size_mb)"
 }
 
 cleanup_run() {
@@ -92,6 +128,9 @@ cleanup_run() {
     pacman) pkexec paccache -r -u -k0 ;;
     coredump) pkexec rm -rf /var/lib/systemd/coredump/* ;;
     trash) rm -rf "$HOME/.local/share/Trash/files/"* "$HOME/.local/share/Trash/info/"* ;;
+    docker) docker system prune -f ;;
+    browser) rm -rf "$HOME/.cache/google-chrome/"* "$HOME/.cache/chromium/"* ;;
+    journal) pkexec journalctl --vacuum-size=100M ;;
     *) exit 1 ;;
   esac
 }
