@@ -123,6 +123,17 @@ journal_size_mb() {
   '
 }
 
+orphans_count() {
+  (pacman -Qtdq 2>/dev/null || true) | wc -l
+}
+
+orphans_size_mb() {
+  local pkgs
+  pkgs=$(pacman -Qtdq 2>/dev/null || true)
+  [ -z "$pkgs" ] && { echo 0; return; }
+  expac -H M '%m' $pkgs 2>/dev/null | awk '{t += $1} END { printf "%.0f", t + 0 }'
+}
+
 cleanup_status() {
   printf 'pacman\t%s\n' "$(dir_size_mb /var/cache/pacman/pkg/)"
   printf 'coredump\t%s\n' "$(dir_size_mb /var/lib/systemd/coredump/)"
@@ -130,6 +141,8 @@ cleanup_status() {
   printf 'docker\t%s\n' "$(docker_size_mb)"
   printf 'browser\t%s\n' "$(browser_cache_mb)"
   printf 'journal\t%s\n' "$(journal_size_mb)"
+  printf 'orphans_count\t%s\n' "$(orphans_count)"
+  printf 'orphans_mb\t%s\n' "$(orphans_size_mb)"
 }
 
 cleanup_run() {

@@ -25,7 +25,7 @@ Panel {
   property var packages: []
   property var webapps: []
   property var autostartItems: []
-  property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, journal: 0 })
+  property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, journal: 0, orphans_count: 0, orphans_mb: 0 })
   property bool busy: false
   property string statusText: ""
 
@@ -386,58 +386,87 @@ Panel {
           }
         }
 
-        Column {
+        ListView {
           anchors.fill: parent
           visible: root.activeTab === "cleanup"
-          spacing: Style.space(10)
+          clip: true
+          spacing: Style.space(4)
+          model: [
+            { key: "pacman", label: "Pacman cache", action: "clean", note: "Skips packages you still have installed" },
+            { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete" },
+            { key: "trash", label: "Trash", action: "clean", note: "" },
+            { key: "docker", label: "Docker (prune)", action: "clean", note: "Leaves images you still use alone" },
+            { key: "browser", label: "Browser cache", action: "clean", note: "Just page cache — won't log you out" },
+            { key: "journal", label: "Journal logs", action: "clean", note: "Keeps the latest 100 MiB" },
+            { key: "orphans", label: "Orphan packages", action: "view", note: "Safe to remove — opens Packages → Orphans" }
+          ]
 
-          Repeater {
-            model: [
-              { key: "pacman", label: "Pacman cache" },
-              { key: "coredump", label: "Coredumps" },
-              { key: "trash", label: "Trash" },
-              { key: "docker", label: "Docker (prune)" },
-              { key: "browser", label: "Browser cache" },
-              { key: "journal", label: "Journal logs" }
-            ]
+          delegate: Rectangle {
+            required property var modelData
+            width: ListView.view.width
+            height: contentCol.implicitHeight + Style.space(14)
+            color: "transparent"
 
-            Rectangle {
-              required property var modelData
-              width: parent.width
-              height: Style.space(44)
-              color: "transparent"
+            Column {
+              id: contentCol
+              anchors.left: parent.left
+              anchors.leftMargin: Style.space(6)
+              anchors.right: actionBtn.left
+              anchors.rightMargin: Style.space(10)
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(2)
 
               Text {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                text: modelData.label + " — " + Model.formatMib(root.cleanupStatus[modelData.key] || 0)
+                width: contentCol.width
+                text: modelData.key === "orphans"
+                  ? modelData.label + " (" + (root.cleanupStatus.orphans_count || 0) + ") — " + Model.formatMib(root.cleanupStatus.orphans_mb || 0)
+                  : modelData.label + " — " + Model.formatMib(root.cleanupStatus[modelData.key] || 0)
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
               }
 
-              Rectangle {
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                width: Style.space(72)
-                height: Style.space(26)
-                radius: Style.cornerRadius
-                color: cleanMouse.containsMouse ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.14) : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
+              Text {
+                visible: modelData.note !== ""
+                width: contentCol.width
+                wrapMode: Text.WordWrap
+                text: modelData.note
+                color: Qt.darker(root.contentForeground, 1.5)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+            }
 
-                Text {
-                  anchors.centerIn: parent
-                  text: "Clean"
-                  color: root.contentForeground
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.caption
-                }
+            Rectangle {
+              id: actionBtn
+              anchors.right: parent.right
+              anchors.rightMargin: Style.space(6)
+              anchors.verticalCenter: parent.verticalCenter
+              width: Style.space(72)
+              height: Style.space(26)
+              radius: Style.cornerRadius
+              color: cleanMouse.containsMouse ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.14) : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
 
-                MouseArea {
-                  id: cleanMouse
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: root.runCleanup(modelData.key)
+              Text {
+                anchors.centerIn: parent
+                text: modelData.action === "view" ? "View" : "Clean"
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              MouseArea {
+                id: cleanMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  if (modelData.action === "view") {
+                    root.activeTab = "packages"
+                    root.setPackagesFilter("orphans")
+                  } else {
+                    root.runCleanup(modelData.key)
+                  }
                 }
               }
             }
@@ -494,8 +523,18 @@ Panel {
     }
     onExited: function(exitCode) {
       root.busy = false
-      if (exitCode === 0) root.statusText = ""
+      Qt.callLater(function() {
+        if (exitCode === 0) root.statusText = "Done"
+        else if (root.statusText === "") root.statusText = "Failed"
+        statusClearTimer.restart()
+      })
       root.refreshAll()
     }
+  }
+
+  Timer {
+    id: statusClearTimer
+    interval: 4000
+    onTriggered: root.statusText = ""
   }
 }
