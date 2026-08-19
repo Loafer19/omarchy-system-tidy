@@ -48,7 +48,11 @@ packages_orphans() {
 
 packages_remove() {
   [ "$#" -eq 0 ] && exit 0
-  pkexec pacman -Rns --noconfirm "$@"
+  pkexec bash -c '
+    command -v snapper >/dev/null 2>&1 && snapper create -c number -d "$1" >/dev/null 2>&1
+    shift
+    exec pacman -Rns --noconfirm "$@"
+  ' _ "system-tidy: before removing $*" "$@"
 }
 
 webapps_list() {

@@ -63,7 +63,7 @@ Panel {
     packagesProc.running = true
   }
 
-  function removePackage(name) { runAction(["packages-remove", name], "Removing " + name + "…") }
+  function removePackage(name) { runAction(["packages-remove", name], "Snapshotting + removing " + name + "…") }
   function removeWebapp(name) { runAction(["webapps-remove", name], "Removing " + name + "…") }
   function disableAutostart(name) { runAction(["autostart-disable", name], "Disabling " + name + "…") }
   function runCleanup(target) { runAction(["cleanup-run", target], "Cleaning " + target + "…") }
@@ -131,6 +131,7 @@ Panel {
 
         Text {
           visible: root.statusText !== ""
+          leftPadding: Style.space(6)
           text: root.statusText
           color: root.contentForeground
           font.family: root.contentFontFamily
