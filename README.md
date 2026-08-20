@@ -3,7 +3,7 @@
 A bar widget for [Omarchy](https://github.com/basecamp/omarchy) that shows
 what's cluttering your system and lets you clean it in one panel.
 
-![Packages tab](preview.png)
+![Packages tab](.github/preview-packages.png)
 
 Click the broom in the bar:
 
@@ -22,7 +22,7 @@ Click the broom in the bar:
   logs, plus an orphan-packages summary linking back to Packages. Each row
   says what it does and doesn't touch.
 
-![Cleanup tab](preview-cleanup.png)
+![Cleanup tab](.github/preview-cleanup.png)
 
 Status line shows Done/Failed for a couple seconds after every action.
 

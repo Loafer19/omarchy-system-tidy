@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "yoyo.system-tidy",
   "name": "System Tidy",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "yoyo",
-  "description": "Audit user-added packages, webapp launchers, autostart entries, and disk cleanup targets",
+  "description": "Audit user-added packages, webapp launchers, autostart entries, systemd user services, and disk cleanup targets",
   "kinds": [
     "bar-widget"
   ],
@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "System Tidy",
-    "description": "Package/webapp/autostart/cleanup audit panel",
+    "description": "Package/webapp/autostart/services/cleanup audit panel",
     "category": "System",
     "allowMultiple": false
   }
