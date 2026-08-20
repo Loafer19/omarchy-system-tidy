@@ -14,8 +14,8 @@ Click the broom in the bar:
 - **Webapps** — launchers from `omarchy webapp install`, one-click remove.
 - **Autostart** — user + system autostart entries, one-click disable.
 - **Cleanup** — pacman cache, coredumps, trash, Docker, browser cache,
-  journal logs, plus an orphan-packages summary linking back to Packages.
-  Each row says what it does and doesn't touch.
+  AUR build cache (yay/paru), journal logs, plus an orphan-packages summary
+  linking back to Packages. Each row says what it does and doesn't touch.
 
 ![Cleanup tab](preview-cleanup.png)
 

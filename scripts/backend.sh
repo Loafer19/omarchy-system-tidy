@@ -130,6 +130,15 @@ browser_cache_mb() {
   echo "$total"
 }
 
+aur_cache_mb() {
+  local total=0 d size
+  for d in "$HOME/.cache/yay" "$HOME/.cache/paru"; do
+    size=$(dir_size_mb "$d")
+    total=$((total + ${size:-0}))
+  done
+  echo "$total"
+}
+
 journal_size_mb() {
   journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMG]' | head -1 | awk '
     {
@@ -160,6 +169,7 @@ cleanup_status() {
   printf 'trash\t%s\n' "$(dir_size_mb "$HOME/.local/share/Trash/")"
   printf 'docker\t%s\n' "$(docker_size_mb)"
   printf 'browser\t%s\n' "$(browser_cache_mb)"
+  printf 'aur\t%s\n' "$(aur_cache_mb)"
   printf 'journal\t%s\n' "$(journal_size_mb)"
   printf 'orphans_count\t%s\n' "$(orphans_count)"
   printf 'orphans_mb\t%s\n' "$(orphans_size_mb)"
@@ -172,6 +182,7 @@ cleanup_run() {
     trash) rm -rf "$HOME/.local/share/Trash/files/"* "$HOME/.local/share/Trash/info/"* ;;
     docker) docker system prune -f ;;
     browser) rm -rf "$HOME/.cache/google-chrome/"* "$HOME/.cache/chromium/"* ;;
+    aur) rm -rf "$HOME/.cache/yay/"* "$HOME/.cache/paru/"* ;;
     journal) pkexec journalctl --vacuum-size=100M ;;
     *) exit 1 ;;
   esac
