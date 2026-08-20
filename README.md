@@ -33,6 +33,15 @@ browser-cache/trash clearing run as your own user.
 omarchy plugin add https://github.com/Loafer19/omarchy-system-tidy --enable
 ```
 
+## Uninstall
+
+```bash
+omarchy plugin remove yoyo.system-tidy
+```
+
+This removes the plugin only — packages, webapps, and autostart entries you
+cleaned up with it are unaffected either way.
+
 ## Safety
 
 Package removal is `pacman -Rns` — only that package's own dependencies go
