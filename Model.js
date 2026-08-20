@@ -32,7 +32,7 @@ function parseAutostart(text) {
 
 function parseCleanupStatus(text) {
   var rows = parseTsvRows(text, ["key", "mb"])
-  var result = { pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, journal: 0, orphans_count: 0, orphans_mb: 0 }
+  var result = { pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, journal: 0, orphans_count: 0, orphans_mb: 0 }
   for (var i = 0; i < rows.length; i++) {
     if (result.hasOwnProperty(rows[i].key)) result[rows[i].key] = parseFloat(rows[i].mb) || 0
   }

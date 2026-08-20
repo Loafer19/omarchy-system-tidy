@@ -25,7 +25,7 @@ Panel {
   property var packages: []
   property var webapps: []
   property var autostartItems: []
-  property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, journal: 0, orphans_count: 0, orphans_mb: 0 })
+  property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, journal: 0, orphans_count: 0, orphans_mb: 0 })
   property bool busy: false
   property string statusText: ""
   property string statusKind: "progress" // "progress" | "done" | "error"
@@ -465,6 +465,7 @@ Panel {
             { key: "docker", label: "Docker (prune)", action: "clean", note: "Leaves images you still use alone" },
             { key: "browser", label: "Browser cache", action: "clean", note: "Just page cache — won't log you out" },
             { key: "aur", label: "AUR build cache", action: "clean", note: "yay/paru build artifacts, safe to delete" },
+            { key: "dev", label: "Dev tool caches", action: "clean", note: "pip, npm, cargo, go — all rebuild on demand" },
             { key: "journal", label: "Journal logs", action: "clean", note: "Keeps the latest 100 MiB" },
             { key: "orphans", label: "Orphan packages", action: "view", note: "Safe to remove — opens Packages → Orphans" }
           ]

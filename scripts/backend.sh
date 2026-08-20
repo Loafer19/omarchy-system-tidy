@@ -139,6 +139,15 @@ aur_cache_mb() {
   echo "$total"
 }
 
+dev_cache_mb() {
+  local total=0 d size
+  for d in "$HOME/.cache/pip" "$HOME/.npm" "$HOME/.cargo/registry" "$HOME/go/pkg/mod"; do
+    size=$(dir_size_mb "$d")
+    total=$((total + ${size:-0}))
+  done
+  echo "$total"
+}
+
 journal_size_mb() {
   journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMG]' | head -1 | awk '
     {
@@ -170,9 +179,26 @@ cleanup_status() {
   printf 'docker\t%s\n' "$(docker_size_mb)"
   printf 'browser\t%s\n' "$(browser_cache_mb)"
   printf 'aur\t%s\n' "$(aur_cache_mb)"
+  printf 'dev\t%s\n' "$(dev_cache_mb)"
   printf 'journal\t%s\n' "$(journal_size_mb)"
   printf 'orphans_count\t%s\n' "$(orphans_count)"
   printf 'orphans_mb\t%s\n' "$(orphans_size_mb)"
+}
+
+dev_cache_clean() {
+  # Clear the cache directories directly rather than shelling out to each
+  # tool's own "clean" command — those no-op (or aren't even on PATH) when
+  # the tool was installed via a version manager outside this process's
+  # environment, leaving the cache untouched despite reporting success.
+  rm -rf "$HOME/.cache/pip/"* "$HOME/.npm/"* "$HOME/.cargo/registry/"*
+  # Go marks module cache entries read-only; strip that first so rm doesn't
+  # stop partway through (this is what `go clean -modcache` does internally
+  # — done directly so it works even without `go` on PATH).
+  if [ -d "$HOME/go/pkg/mod" ]; then
+    chmod -R u+w "$HOME/go/pkg/mod" 2>/dev/null || true
+    rm -rf "$HOME/go/pkg/mod/"*
+  fi
+  return 0
 }
 
 cleanup_run() {
@@ -183,6 +209,7 @@ cleanup_run() {
     docker) docker system prune -f ;;
     browser) rm -rf "$HOME/.cache/google-chrome/"* "$HOME/.cache/chromium/"* ;;
     aur) rm -rf "$HOME/.cache/yay/"* "$HOME/.cache/paru/"* ;;
+    dev) dev_cache_clean ;;
     journal) pkexec journalctl --vacuum-size=100M ;;
     *) exit 1 ;;
   esac
