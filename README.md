@@ -3,7 +3,7 @@
 A bar widget for [Omarchy](https://github.com/basecamp/omarchy) that shows
 what's cluttering your system and lets you clean it in one panel.
 
-![Packages tab](.github/preview-packages.png)
+![Cleanup tab](preview.png)
 
 Click the broom in the bar:
 
@@ -21,8 +21,6 @@ Click the broom in the bar:
   AUR build cache (yay/paru), dev tool caches (pip/npm/cargo/go), journal
   logs, plus an orphan-packages summary linking back to Packages. Each row
   says what it does and doesn't touch.
-
-![Cleanup tab](.github/preview-cleanup.png)
 
 Status line shows Done/Failed for a couple seconds after every action.
 
