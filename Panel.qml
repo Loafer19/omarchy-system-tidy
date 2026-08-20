@@ -49,10 +49,10 @@ Panel {
 
   readonly property var tabs: [
     { key: "packages", label: "Packages" },
-    { key: "webapps", label: "Webapps" },
+    { key: "cleanup", label: "Cleanup" },
     { key: "autostart", label: "Autostart" },
     { key: "services", label: "Services" },
-    { key: "cleanup", label: "Cleanup" }
+    { key: "webapps", label: "Webapps" }
   ]
 
   function refreshAll() {
@@ -543,13 +543,13 @@ Panel {
           spacing: root.rowGap
           model: [
             { key: "pacman", label: "Pacman cache", action: "clean", note: "Skips packages you still have installed" },
-            { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete" },
-            { key: "trash", label: "Trash", action: "clean", note: "" },
-            { key: "docker", label: "Docker (prune)", action: "clean", note: "Leaves images you still use alone" },
-            { key: "browser", label: "Browser cache", action: "clean", note: "Just page cache — won't log you out" },
             { key: "aur", label: "AUR build cache", action: "clean", note: "yay/paru build artifacts, safe to delete" },
             { key: "dev", label: "Dev tool caches", action: "clean", note: "pip, npm, cargo, go — all rebuild on demand" },
+            { key: "docker", label: "Docker (prune)", action: "clean", note: "Leaves images you still use alone" },
+            { key: "browser", label: "Browser cache", action: "clean", note: "Just page cache — won't log you out" },
+            { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete" },
             { key: "journal", label: "Journal logs", action: "clean", note: "Keeps the latest 100 MiB" },
+            { key: "trash", label: "Trash", action: "clean", note: "" },
             { key: "orphans", label: "Orphan packages", action: "view", note: "Safe to remove — opens Packages → Orphans" }
           ]
 
