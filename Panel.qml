@@ -28,10 +28,23 @@ Panel {
   property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, journal: 0, orphans_count: 0, orphans_mb: 0 })
   property bool busy: false
   property string statusText: ""
+  property string statusKind: "progress" // "progress" | "done" | "error"
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color dividerColor: Qt.rgba(contentForeground.r, contentForeground.g, contentForeground.b, 0.12)
+
+  // Single edge-margin/padding value for every row and section gap in this
+  // panel, so spacing stays consistent in one place instead of scattered
+  // ad-hoc numbers.
+  readonly property int edgeMargin: Style.space(6)
+  readonly property int rowGap: 0
+  readonly property int rowHeight: Style.space(44)
+
+  readonly property color normalRowFill: Style.normalFillFor(contentForeground, Color.accent, Color.urgent)
+  readonly property color hoverRowFill: Style.hoverFillFor(contentForeground, Color.accent, Color.urgent)
+  readonly property color selectedRowFill: Style.selectedFillFor(contentForeground, Color.accent, Color.urgent)
+  readonly property color dangerHoverFill: Util.alpha(Color.urgent, Style.hoverFillAlpha)
 
   readonly property var tabs: [
     { key: "packages", label: "Packages" },
@@ -53,6 +66,7 @@ Panel {
     if (root.busy) return
     root.busy = true
     root.statusText = message
+    root.statusKind = "progress"
     actionProc.command = ["bash", root.backendPath].concat(args)
     actionProc.running = true
   }
@@ -103,8 +117,10 @@ Panel {
               height: Style.space(28)
               radius: Style.cornerRadius
               color: root.activeTab === modelData.key
-                ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.12)
-                : (tabMouse.containsMouse ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.06) : "transparent")
+                ? root.selectedRowFill
+                : (tabMouse.containsMouse ? root.hoverRowFill : "transparent")
+              border.width: root.activeTab === modelData.key ? 0 : Style.spacing.hairline
+              border.color: root.dividerColor
 
               Text {
                 id: tabLabel
@@ -130,19 +146,36 @@ Panel {
         Rectangle { width: parent.width; height: Style.spacing.hairline; color: root.dividerColor }
 
         Text {
-          visible: root.statusText !== ""
-          leftPadding: Style.space(6)
-          text: root.statusText
-          color: root.contentForeground
+          id: statusLabel
+          visible: opacity > 0
+          leftPadding: root.edgeMargin
+          width: parent.width - root.edgeMargin
+          elide: Text.ElideRight
+          color: root.statusKind === "error" ? Color.urgent
+            : root.statusKind === "done" ? Color.accent
+            : root.contentForeground
           font.family: root.contentFontFamily
-          font.pixelSize: Style.font.bodySmall
+          font.pixelSize: Style.font.body
+          font.bold: true
+          opacity: root.statusText !== "" ? 1 : 0
+
+          Behavior on opacity { NumberAnimation { duration: 150 } }
+
+          // Keeps showing the last message while it fades out, instead of
+          // snapping to blank the instant statusClearTimer clears the text.
+          Connections {
+            target: root
+            function onStatusTextChanged() {
+              if (root.statusText !== "") statusLabel.text = root.statusText
+            }
+          }
         }
       }
 
       Item {
         id: body
         anchors.top: header.bottom
-        anchors.topMargin: Style.space(8)
+        anchors.topMargin: root.edgeMargin
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -153,7 +186,7 @@ Panel {
           anchors.top: parent.top
           anchors.left: parent.left
           height: Style.space(24)
-          spacing: Style.space(6)
+          spacing: root.edgeMargin
 
           Repeater {
             model: [
@@ -168,8 +201,8 @@ Panel {
               height: Style.space(24)
               radius: Style.cornerRadius
               color: selected
-                ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.14)
-                : (filterMouse.containsMouse ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.06) : "transparent")
+                ? root.selectedRowFill
+                : (filterMouse.containsMouse ? root.hoverRowFill : "transparent")
               border.width: selected ? 0 : Style.spacing.hairline
               border.color: root.dividerColor
 
@@ -177,7 +210,7 @@ Panel {
                 id: filterLabel
                 anchors.centerIn: parent
                 text: modelData.label
-                color: selected ? root.contentForeground : Qt.darker(root.contentForeground, 1.4)
+                color: selected ? root.contentForeground : Qt.darker(root.contentForeground, 1.5)
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.caption
               }
@@ -195,26 +228,32 @@ Panel {
 
         ListView {
           anchors.top: packagesFilterRow.bottom
-          anchors.topMargin: Style.space(6)
+          anchors.topMargin: root.edgeMargin
           anchors.left: parent.left
           anchors.right: parent.right
           anchors.bottom: parent.bottom
           visible: root.activeTab === "packages"
           clip: true
+          spacing: root.rowGap
           model: root.packages
           delegate: Rectangle {
             required property var modelData
             width: ListView.view.width
-            height: Style.space(44)
+            height: root.rowHeight
             color: "transparent"
 
             Column {
+              id: packageInfoCol
               anchors.left: parent.left
+              anchors.leftMargin: root.edgeMargin
+              anchors.right: removeBtn.left
+              anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
-              anchors.leftMargin: Style.space(6)
               spacing: Style.space(2)
 
               Text {
+                width: packageInfoCol.width
+                elide: Text.ElideRight
                 text: modelData.name
                 color: root.contentForeground
                 font.family: root.contentFontFamily
@@ -222,6 +261,8 @@ Panel {
                 font.bold: true
               }
               Text {
+                width: packageInfoCol.width
+                elide: Text.ElideRight
                 text: Model.formatMib(modelData.sizeMb) + " · installed " + modelData.date + " · used " + modelData.lastUsed
                 color: Qt.darker(root.contentForeground, 1.5)
                 font.family: root.contentFontFamily
@@ -230,13 +271,14 @@ Panel {
             }
 
             Rectangle {
+              id: removeBtn
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              anchors.rightMargin: Style.space(6)
+              anchors.rightMargin: root.edgeMargin
               width: Style.space(72)
               height: Style.space(26)
               radius: Style.cornerRadius
-              color: removeMouse.containsMouse ? Qt.rgba(0.8, 0.2, 0.2, 0.25) : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
+              color: removeMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
 
               Text {
                 anchors.centerIn: parent
@@ -272,31 +314,37 @@ Panel {
           anchors.fill: parent
           visible: root.activeTab === "webapps"
           clip: true
+          spacing: root.rowGap
           model: root.webapps
           delegate: Rectangle {
             required property var modelData
             width: ListView.view.width
-            height: Style.space(40)
+            height: root.rowHeight
             color: "transparent"
 
             Text {
               anchors.left: parent.left
+              anchors.leftMargin: root.edgeMargin
+              anchors.right: removeWebappBtn.left
+              anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
-              anchors.leftMargin: Style.space(6)
+              elide: Text.ElideRight
               text: modelData.name
               color: root.contentForeground
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.body
+              font.bold: true
             }
 
             Rectangle {
+              id: removeWebappBtn
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              anchors.rightMargin: Style.space(6)
+              anchors.rightMargin: root.edgeMargin
               width: Style.space(72)
               height: Style.space(26)
               radius: Style.cornerRadius
-              color: removeWebappMouse.containsMouse ? Qt.rgba(0.8, 0.2, 0.2, 0.25) : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
+              color: removeWebappMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
 
               Text {
                 anchors.centerIn: parent
@@ -330,20 +378,26 @@ Panel {
           anchors.fill: parent
           visible: root.activeTab === "autostart"
           clip: true
+          spacing: root.rowGap
           model: root.autostartItems
           delegate: Rectangle {
             required property var modelData
             width: ListView.view.width
-            height: Style.space(44)
+            height: root.rowHeight
             color: "transparent"
 
             Column {
+              id: autostartInfoCol
               anchors.left: parent.left
+              anchors.leftMargin: root.edgeMargin
+              anchors.right: disableBtn.left
+              anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
-              anchors.leftMargin: Style.space(6)
               spacing: Style.space(2)
 
               Text {
+                width: autostartInfoCol.width
+                elide: Text.ElideRight
                 text: modelData.name
                 color: root.contentForeground
                 font.family: root.contentFontFamily
@@ -351,6 +405,8 @@ Panel {
                 font.bold: true
               }
               Text {
+                width: autostartInfoCol.width
+                elide: Text.ElideRight
                 text: modelData.status + " · " + modelData.source
                 color: Qt.darker(root.contentForeground, 1.5)
                 font.family: root.contentFontFamily
@@ -359,14 +415,15 @@ Panel {
             }
 
             Rectangle {
+              id: disableBtn
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              anchors.rightMargin: Style.space(6)
+              anchors.rightMargin: root.edgeMargin
               width: Style.space(72)
               height: Style.space(26)
               radius: Style.cornerRadius
               visible: modelData.status === "enabled"
-              color: disableMouse.containsMouse ? Qt.rgba(0.8, 0.2, 0.2, 0.25) : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
+              color: disableMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
 
               Text {
                 anchors.centerIn: parent
@@ -400,7 +457,7 @@ Panel {
           anchors.fill: parent
           visible: root.activeTab === "cleanup"
           clip: true
-          spacing: Style.space(4)
+          spacing: root.rowGap
           model: [
             { key: "pacman", label: "Pacman cache", action: "clean", note: "Skips packages you still have installed" },
             { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete" },
@@ -414,33 +471,38 @@ Panel {
           delegate: Rectangle {
             required property var modelData
             width: ListView.view.width
-            height: contentCol.implicitHeight + Style.space(14)
+            height: root.rowHeight
             color: "transparent"
 
             Column {
               id: contentCol
               anchors.left: parent.left
-              anchors.leftMargin: Style.space(6)
+              anchors.leftMargin: root.edgeMargin
               anchors.right: actionBtn.left
-              anchors.rightMargin: Style.space(10)
+              anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(2)
 
               Text {
                 width: contentCol.width
                 text: modelData.key === "orphans"
-                  ? modelData.label + " (" + (root.cleanupStatus.orphans_count || 0) + ") — " + Model.formatMib(root.cleanupStatus.orphans_mb || 0)
-                  : modelData.label + " — " + Model.formatMib(root.cleanupStatus[modelData.key] || 0)
+                  ? modelData.label + " (" + (root.cleanupStatus.orphans_count || 0) + ")"
+                  : modelData.label
                 color: root.contentForeground
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.body
+                font.bold: true
               }
 
               Text {
-                visible: modelData.note !== ""
                 width: contentCol.width
-                wrapMode: Text.WordWrap
-                text: modelData.note
+                elide: Text.ElideRight
+                text: {
+                  var size = modelData.key === "orphans"
+                    ? Model.formatMib(root.cleanupStatus.orphans_mb || 0)
+                    : Model.formatMib(root.cleanupStatus[modelData.key] || 0)
+                  return modelData.note !== "" ? size + " · " + modelData.note : size
+                }
                 color: Qt.darker(root.contentForeground, 1.5)
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.caption
@@ -450,14 +512,14 @@ Panel {
             Rectangle {
               id: actionBtn
               anchors.right: parent.right
-              anchors.rightMargin: Style.space(6)
+              anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
               width: Style.space(72)
               height: Style.space(26)
               radius: Style.cornerRadius
               color: cleanMouse.containsMouse
-                ? (modelData.action === "view" ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.14) : Qt.rgba(0.8, 0.2, 0.2, 0.25))
-                : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
+                ? (modelData.action === "view" ? root.hoverRowFill : root.dangerHoverFill)
+                : root.normalRowFill
 
               Text {
                 anchors.centerIn: parent
@@ -530,14 +592,14 @@ Panel {
       waitForEnd: true
       onStreamFinished: {
         var err = String(text || "").trim()
-        if (err !== "") root.statusText = err
+        if (err !== "") { root.statusText = err; root.statusKind = "error" }
       }
     }
     onExited: function(exitCode) {
       root.busy = false
       Qt.callLater(function() {
-        if (exitCode === 0) root.statusText = "Done"
-        else if (root.statusText === "") root.statusText = "Failed"
+        if (exitCode === 0) { root.statusText = "Done"; root.statusKind = "done" }
+        else if (root.statusText === "") { root.statusText = "Failed"; root.statusKind = "error" }
         statusClearTimer.restart()
       })
       root.refreshAll()

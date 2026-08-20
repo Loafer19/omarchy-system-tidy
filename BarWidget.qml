@@ -63,33 +63,17 @@ BarWidget {
     function toggle(): void { root.toggle() }
   }
 
-  WidgetButton {
+  // Nerd Font "md-broom" glyph, rendered the same way every other first-party
+  // bar icon is (BarIconButton -> OpticalGlyph text), instead of a rasterized
+  // SVG + MultiEffect recolor — matches neighboring icons' weight/brightness
+  // exactly since it's the same font-glyph rendering path they all use.
+  BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: ""
-    labelVisible: false
-    hasVisualContent: true
-    fixedWidth: Style.bar.iconSlot
-    horizontalMargin: 8.75
-    verticalPadding: 8.75
+    text: "󰃢"
     tooltipText: "System Tidy"
 
     onPressed: function(b) { root.toggle() }
-
-    // MDI "broom" glyph (broom.svg, Apache-2.0), pre-tinted to the bar's
-    // foreground (#A9B1D6, sampled from the neighboring icons) rather than
-    // recolored at runtime — one less moving part than a shader effect.
-    Image {
-      id: icon
-      anchors.centerIn: parent
-      width: Style.space(16)
-      height: Style.space(16)
-      source: Qt.resolvedUrl("broom.svg")
-      sourceSize.width: width * 2
-      sourceSize.height: height * 2
-      fillMode: Image.PreserveAspectFit
-      smooth: true
-    }
   }
 }
