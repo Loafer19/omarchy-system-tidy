@@ -5,9 +5,10 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 
-// Tabbed audit panel: packages added on top of the Omarchy defaults, webapp
-// launchers, autostart entries, and disk cleanup targets. Each tab shells
-// out to scripts/backend.sh and lists results with a one-click action.
+// Tabbed audit panel: packages added on top of the Omarchy defaults, disk
+// cleanup targets, startup items (autostart + systemd user services), and
+// webapp launchers. Each tab shells out to scripts/backend.sh and lists
+// results with a one-click action.
 Panel {
   id: root
   moduleName: "yoyo.system-tidy"
@@ -22,6 +23,7 @@ Panel {
 
   property string activeTab: "packages"
   property string packagesFilter: "extra"
+  property string startupFilter: "autostart"
   property var packages: []
   property var webapps: []
   property var autostartItems: []
@@ -50,10 +52,20 @@ Panel {
   readonly property var tabs: [
     { key: "packages", label: "Packages" },
     { key: "cleanup", label: "Cleanup" },
-    { key: "autostart", label: "Autostart" },
-    { key: "services", label: "Services" },
+    { key: "startup", label: "Startup" },
     { key: "webapps", label: "Webapps" }
   ]
+
+  readonly property var startupItems: {
+    if (root.startupFilter === "services") {
+      return root.systemdUnits.map(function(u) {
+        return { name: u.name, status: u.status, kind: "systemd", detail: u.type }
+      })
+    }
+    return root.autostartItems.map(function(a) {
+      return { name: a.name, status: a.status, kind: "autostart", detail: a.source }
+    })
+  }
 
   function refreshAll() {
     packagesProc.running = true
@@ -80,10 +92,18 @@ Panel {
     packagesProc.running = true
   }
 
+  function setStartupFilter(key) {
+    root.startupFilter = key
+  }
+
   function removePackage(name) { runAction(["packages-remove", name], "Snapshotting + removing " + name + "…") }
   function removeWebapp(name) { runAction(["webapps-remove", name], "Removing " + name + "…") }
   function disableAutostart(name) { runAction(["autostart-disable", name], "Disabling " + name + "…") }
   function disableSystemdUnit(name) { runAction(["systemd-disable", name], "Disabling " + name + "…") }
+  function disableStartupItem(item) {
+    if (item.kind === "systemd") root.disableSystemdUnit(item.name)
+    else root.disableAutostart(item.name)
+  }
   function runCleanup(target) { runAction(["cleanup-run", target], "Cleaning " + target + "…") }
 
   KeyboardPanel {
@@ -378,12 +398,62 @@ Panel {
           font.pixelSize: Style.font.body
         }
 
+        Row {
+          id: startupFilterRow
+          visible: root.activeTab === "startup"
+          anchors.top: parent.top
+          anchors.left: parent.left
+          height: Style.space(24)
+          spacing: root.edgeMargin
+
+          Repeater {
+            model: [
+              { key: "autostart", label: "Autostart" },
+              { key: "services", label: "Services" }
+            ]
+
+            Rectangle {
+              required property var modelData
+              readonly property bool selected: root.startupFilter === modelData.key
+              width: startupFilterLabel.implicitWidth + Style.space(16)
+              height: Style.space(24)
+              radius: Style.cornerRadius
+              color: selected
+                ? root.selectedRowFill
+                : (startupFilterMouse.containsMouse ? root.hoverRowFill : "transparent")
+              border.width: selected ? 0 : Style.spacing.hairline
+              border.color: root.dividerColor
+
+              Text {
+                id: startupFilterLabel
+                anchors.centerIn: parent
+                text: modelData.label
+                color: selected ? root.contentForeground : Qt.darker(root.contentForeground, 1.5)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              MouseArea {
+                id: startupFilterMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.setStartupFilter(modelData.key)
+              }
+            }
+          }
+        }
+
         ListView {
-          anchors.fill: parent
-          visible: root.activeTab === "autostart"
+          anchors.top: startupFilterRow.bottom
+          anchors.topMargin: root.edgeMargin
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.bottom: parent.bottom
+          visible: root.activeTab === "startup"
           clip: true
           spacing: root.rowGap
-          model: root.autostartItems
+          model: root.startupItems
           delegate: Rectangle {
             required property var modelData
             width: ListView.view.width
@@ -391,16 +461,16 @@ Panel {
             color: "transparent"
 
             Column {
-              id: autostartInfoCol
+              id: startupInfoCol
               anchors.left: parent.left
               anchors.leftMargin: root.edgeMargin
-              anchors.right: disableBtn.left
+              anchors.right: disableStartupBtn.left
               anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(2)
 
               Text {
-                width: autostartInfoCol.width
+                width: startupInfoCol.width
                 elide: Text.ElideRight
                 text: modelData.name
                 color: root.contentForeground
@@ -409,9 +479,9 @@ Panel {
                 font.bold: true
               }
               Text {
-                width: autostartInfoCol.width
+                width: startupInfoCol.width
                 elide: Text.ElideRight
-                text: modelData.status + " · " + modelData.source
+                text: modelData.status + " · " + modelData.detail
                 color: Qt.darker(root.contentForeground, 1.5)
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.caption
@@ -419,7 +489,7 @@ Panel {
             }
 
             Rectangle {
-              id: disableBtn
+              id: disableStartupBtn
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               anchors.rightMargin: root.edgeMargin
@@ -427,7 +497,7 @@ Panel {
               height: Style.space(26)
               radius: Style.cornerRadius
               visible: modelData.status === "enabled"
-              color: disableMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
+              color: disableStartupMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
 
               Text {
                 anchors.centerIn: parent
@@ -438,11 +508,11 @@ Panel {
               }
 
               MouseArea {
-                id: disableMouse
+                id: disableStartupMouse
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.disableAutostart(modelData.name)
+                onClicked: root.disableStartupItem(modelData)
               }
             }
           }
@@ -450,87 +520,10 @@ Panel {
 
         Text {
           anchors.centerIn: parent
-          visible: root.activeTab === "autostart" && root.autostartItems.length === 0
-          text: "No autostart entries found"
-          color: Qt.darker(root.contentForeground, 1.5)
-          font.family: root.contentFontFamily
-          font.pixelSize: Style.font.body
-        }
-
-        ListView {
-          anchors.fill: parent
-          visible: root.activeTab === "services"
-          clip: true
-          spacing: root.rowGap
-          model: root.systemdUnits
-          delegate: Rectangle {
-            required property var modelData
-            width: ListView.view.width
-            height: root.rowHeight
-            color: "transparent"
-
-            Column {
-              id: serviceInfoCol
-              anchors.left: parent.left
-              anchors.leftMargin: root.edgeMargin
-              anchors.right: disableServiceBtn.left
-              anchors.rightMargin: root.edgeMargin
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-
-              Text {
-                width: serviceInfoCol.width
-                elide: Text.ElideRight
-                text: modelData.name
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-              }
-              Text {
-                width: serviceInfoCol.width
-                elide: Text.ElideRight
-                text: modelData.status + " · " + modelData.type
-                color: Qt.darker(root.contentForeground, 1.5)
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-            }
-
-            Rectangle {
-              id: disableServiceBtn
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.rightMargin: root.edgeMargin
-              width: Style.space(72)
-              height: Style.space(26)
-              radius: Style.cornerRadius
-              visible: modelData.status === "enabled"
-              color: disableServiceMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
-
-              Text {
-                anchors.centerIn: parent
-                text: "Disable"
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              MouseArea {
-                id: disableServiceMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.disableSystemdUnit(modelData.name)
-              }
-            }
-          }
-        }
-
-        Text {
-          anchors.centerIn: parent
-          visible: root.activeTab === "services" && root.systemdUnits.length === 0
-          text: "No user-added systemd services found"
+          visible: root.activeTab === "startup" && root.startupItems.length === 0
+          text: root.startupFilter === "services"
+            ? "No user-added systemd services found"
+            : "No autostart entries found"
           color: Qt.darker(root.contentForeground, 1.5)
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body

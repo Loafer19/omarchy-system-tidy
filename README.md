@@ -15,11 +15,11 @@ Click the broom in the bar:
   (pip/npm/cargo/go), Docker (`prune -f`, no `-a` — images you use stay),
   browser cache, coredumps, journal logs, trash, plus an orphan-packages
   summary linking back to Packages.
-- **Autostart** — user + system autostart entries, one-click disable.
-- **Services** — systemd `--user` units you (or something you installed)
-  enabled yourself, one-click disable. Scoped to unit files under
-  `~/.config/systemd/user/` only — vendor-shipped session units (audio,
-  keyring, etc.) never show up here, so there's nothing to break.
+- **Startup** — what starts automatically, one-click disable. **Autostart**
+  chip covers user + system `.desktop` entries; **Services** covers systemd
+  `--user` units you (or something you installed) enabled yourself — scoped
+  to `~/.config/systemd/user/` only, so vendor-shipped session units (audio,
+  keyring, etc.) never show up here and there's nothing to break.
 - **Webapps** — launchers from `omarchy webapp install`, one-click remove.
 
 Status line shows Done/Failed for a couple seconds after every action.

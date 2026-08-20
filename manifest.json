@@ -4,7 +4,7 @@
   "name": "System Tidy",
   "version": "1.1.0",
   "author": "yoyo",
-  "description": "Audit user-added packages, disk cleanup targets, autostart entries, systemd user services, and webapp launchers",
+  "description": "Audit user-added packages, disk cleanup targets, startup items (autostart + systemd user services), and webapp launchers",
   "kinds": [
     "bar-widget"
   ],
@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "System Tidy",
-    "description": "Package/cleanup/autostart/services/webapp audit panel",
+    "description": "Package/cleanup/startup/webapp audit panel",
     "category": "System",
     "allowMultiple": false
   }
