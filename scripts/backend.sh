@@ -102,6 +102,32 @@ autostart_disable() {
   fi
 }
 
+# Scoped to units whose unit file actually lives under
+# ~/.config/systemd/user/ — excludes vendor-shipped units (audio stack,
+# keyring, crash-watch, etc. under /usr/lib/systemd/user/) so this can
+# never offer to disable something the desktop session depends on.
+# Masked units (state=masked) and install-less units (state=static, e.g.
+# services a plugin starts on demand rather than at login) are excluded
+# for free since only state=enabled is queried.
+systemd_user_list() {
+  command -v systemctl >/dev/null 2>&1 || return 0
+  local unit path
+  while read -r unit _; do
+    [ -z "$unit" ] && continue
+    path=$(systemctl --user show "$unit" -p FragmentPath --value 2>/dev/null)
+    case "$path" in
+      "$HOME"/.config/systemd/user/*) ;;
+      *) continue ;;
+    esac
+    printf '%s\tenabled\t%s\n' "$unit" "${unit##*.}"
+  done < <(systemctl --user list-unit-files --state=enabled --no-legend --no-pager 2>/dev/null)
+}
+
+systemd_user_disable() {
+  [ "$#" -eq 0 ] && exit 0
+  systemctl --user disable "$1"
+}
+
 dir_size_mb() {
   du -sm "$1" 2>/dev/null | cut -f1 || true
 }
@@ -225,6 +251,8 @@ case "$cmd" in
   webapps-remove) webapps_remove "$@" ;;
   autostart-list) autostart_list ;;
   autostart-disable) autostart_disable "$@" ;;
+  systemd-list) systemd_user_list ;;
+  systemd-disable) systemd_user_disable "$@" ;;
   cleanup-status) cleanup_status ;;
   cleanup-run) cleanup_run "$@" ;;
   *) echo "unknown command: $cmd" >&2; exit 1 ;;

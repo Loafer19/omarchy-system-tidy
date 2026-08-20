@@ -13,6 +13,10 @@ Click the broom in the bar:
   snapshotted first via `snapper` if it's set up.
 - **Webapps** — launchers from `omarchy webapp install`, one-click remove.
 - **Autostart** — user + system autostart entries, one-click disable.
+- **Services** — systemd `--user` units you (or something you installed)
+  enabled yourself, one-click disable. Scoped to unit files under
+  `~/.config/systemd/user/` only — vendor-shipped session units (audio,
+  keyring, etc.) never show up here, so there's nothing to break.
 - **Cleanup** — pacman cache, coredumps, trash, Docker, browser cache,
   AUR build cache (yay/paru), dev tool caches (pip/npm/cargo/go), journal
   logs, plus an orphan-packages summary linking back to Packages. Each row

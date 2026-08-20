@@ -25,6 +25,7 @@ Panel {
   property var packages: []
   property var webapps: []
   property var autostartItems: []
+  property var systemdUnits: []
   property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, journal: 0, orphans_count: 0, orphans_mb: 0 })
   property bool busy: false
   property string statusText: ""
@@ -50,6 +51,7 @@ Panel {
     { key: "packages", label: "Packages" },
     { key: "webapps", label: "Webapps" },
     { key: "autostart", label: "Autostart" },
+    { key: "services", label: "Services" },
     { key: "cleanup", label: "Cleanup" }
   ]
 
@@ -57,6 +59,7 @@ Panel {
     packagesProc.running = true
     webappsProc.running = true
     autostartProc.running = true
+    systemdProc.running = true
     cleanupProc.running = true
   }
 
@@ -80,6 +83,7 @@ Panel {
   function removePackage(name) { runAction(["packages-remove", name], "Snapshotting + removing " + name + "…") }
   function removeWebapp(name) { runAction(["webapps-remove", name], "Removing " + name + "…") }
   function disableAutostart(name) { runAction(["autostart-disable", name], "Disabling " + name + "…") }
+  function disableSystemdUnit(name) { runAction(["systemd-disable", name], "Disabling " + name + "…") }
   function runCleanup(target) { runAction(["cleanup-run", target], "Cleaning " + target + "…") }
 
   KeyboardPanel {
@@ -455,6 +459,85 @@ Panel {
 
         ListView {
           anchors.fill: parent
+          visible: root.activeTab === "services"
+          clip: true
+          spacing: root.rowGap
+          model: root.systemdUnits
+          delegate: Rectangle {
+            required property var modelData
+            width: ListView.view.width
+            height: root.rowHeight
+            color: "transparent"
+
+            Column {
+              id: serviceInfoCol
+              anchors.left: parent.left
+              anchors.leftMargin: root.edgeMargin
+              anchors.right: disableServiceBtn.left
+              anchors.rightMargin: root.edgeMargin
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(2)
+
+              Text {
+                width: serviceInfoCol.width
+                elide: Text.ElideRight
+                text: modelData.name
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.body
+                font.bold: true
+              }
+              Text {
+                width: serviceInfoCol.width
+                elide: Text.ElideRight
+                text: modelData.status + " · " + modelData.type
+                color: Qt.darker(root.contentForeground, 1.5)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+            }
+
+            Rectangle {
+              id: disableServiceBtn
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.rightMargin: root.edgeMargin
+              width: Style.space(72)
+              height: Style.space(26)
+              radius: Style.cornerRadius
+              visible: modelData.status === "enabled"
+              color: disableServiceMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
+
+              Text {
+                anchors.centerIn: parent
+                text: "Disable"
+                color: root.contentForeground
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              MouseArea {
+                id: disableServiceMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.disableSystemdUnit(modelData.name)
+              }
+            }
+          }
+        }
+
+        Text {
+          anchors.centerIn: parent
+          visible: root.activeTab === "services" && root.systemdUnits.length === 0
+          text: "No user-added systemd services found"
+          color: Qt.darker(root.contentForeground, 1.5)
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body
+        }
+
+        ListView {
+          anchors.fill: parent
           visible: root.activeTab === "cleanup"
           clip: true
           spacing: root.rowGap
@@ -576,6 +659,15 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.autostartItems = Model.parseAutostart(text)
+    }
+  }
+
+  Process {
+    id: systemdProc
+    command: ["bash", root.backendPath, "systemd-list"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.systemdUnits = Model.parseSystemdUnits(text)
     }
   }
 
