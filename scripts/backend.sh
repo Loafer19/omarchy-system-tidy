@@ -55,6 +55,22 @@ packages_remove() {
   ' _ "system-tidy: before removing $*" "$@"
 }
 
+# Leftover config files pacman drops on upgrade/removal when it won't
+# overwrite a locally-modified file. Listing needs no privilege (/etc is
+# world-readable); removing them does, since /etc itself is root-owned.
+packages_pacnew() {
+  (find /etc -xdev \( -name "*.pacnew" -o -name "*.pacsave" -o -name "*.pacorig" \) 2>/dev/null || true) | sort | while read -r f; do
+    [ -f "$f" ] || continue
+    printf '%s\t%s\t%s\n' "$(basename "$f")" "$(stat -c%s "$f" 2>/dev/null || echo 0)" "$f"
+  done
+  return 0
+}
+
+packages_pacnew_remove() {
+  [ "$#" -eq 0 ] && exit 0
+  pkexec rm -f "$1"
+}
+
 webapps_list() {
   (grep -l "Exec=omarchy-launch-webapp\|Exec=omarchy-webapp-handler" "$HOME/.local/share/applications/"*.desktop 2>/dev/null || true) \
     | (while read -r f; do basename "$f" .desktop; done; true) | sort
@@ -247,6 +263,8 @@ case "$cmd" in
   packages-list) packages_list ;;
   packages-orphans) packages_orphans ;;
   packages-remove) packages_remove "$@" ;;
+  packages-pacnew) packages_pacnew ;;
+  packages-pacnew-remove) packages_pacnew_remove "$@" ;;
   webapps-list) webapps_list ;;
   webapps-remove) webapps_remove "$@" ;;
   autostart-list) autostart_list ;;

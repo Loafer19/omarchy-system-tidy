@@ -34,6 +34,12 @@ function parseSystemdUnits(text) {
   return parseTsvRows(text, ["name", "status", "type"])
 }
 
+function parsePacnewFiles(text) {
+  var rows = parseTsvRows(text, ["name", "bytes", "path"])
+  rows.sort(function(a, b) { return parseFloat(b.bytes) - parseFloat(a.bytes) })
+  return rows
+}
+
 function parseCleanupStatus(text) {
   var rows = parseTsvRows(text, ["key", "mb"])
   var result = { pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, journal: 0, orphans_count: 0, orphans_mb: 0 }
@@ -48,4 +54,12 @@ function formatMib(mb) {
   if (isNaN(n)) return "0 MiB"
   if (n >= 1024) return (n / 1024).toFixed(2) + " GiB"
   return n.toFixed(1) + " MiB"
+}
+
+function formatBytes(bytes) {
+  var n = parseFloat(bytes)
+  if (isNaN(n)) return "0 B"
+  if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(2) + " MiB"
+  if (n >= 1024) return (n / 1024).toFixed(1) + " KiB"
+  return n.toFixed(0) + " B"
 }

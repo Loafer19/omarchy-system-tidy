@@ -25,6 +25,7 @@ Panel {
   property string packagesFilter: "extra"
   property string startupFilter: "autostart"
   property var packages: []
+  property var pacnewFiles: []
   property var webapps: []
   property var autostartItems: []
   property var systemdUnits: []
@@ -68,7 +69,8 @@ Panel {
   }
 
   function refreshAll() {
-    packagesProc.running = true
+    if (root.packagesFilter === "pacnew") pacnewProc.running = true
+    else packagesProc.running = true
     webappsProc.running = true
     autostartProc.running = true
     systemdProc.running = true
@@ -89,7 +91,8 @@ Panel {
   function setPackagesFilter(key) {
     if (root.packagesFilter === key) return
     root.packagesFilter = key
-    packagesProc.running = true
+    if (key === "pacnew") pacnewProc.running = true
+    else packagesProc.running = true
   }
 
   function setStartupFilter(key) {
@@ -97,6 +100,7 @@ Panel {
   }
 
   function removePackage(name) { runAction(["packages-remove", name], "Snapshotting + removing " + name + "…") }
+  function removePacnewFile(path, name) { runAction(["packages-pacnew-remove", path], "Removing " + name + "…") }
   function removeWebapp(name) { runAction(["webapps-remove", name], "Removing " + name + "…") }
   function disableAutostart(name) { runAction(["autostart-disable", name], "Disabling " + name + "…") }
   function disableSystemdUnit(name) { runAction(["systemd-disable", name], "Disabling " + name + "…") }
@@ -215,7 +219,8 @@ Panel {
           Repeater {
             model: [
               { key: "extra", label: "Extra" },
-              { key: "orphans", label: "Orphans" }
+              { key: "orphans", label: "Orphans" },
+              { key: "pacnew", label: "Pacnew" }
             ]
 
             Rectangle {
@@ -259,9 +264,10 @@ Panel {
           visible: root.activeTab === "packages"
           clip: true
           spacing: root.rowGap
-          model: root.packages
+          model: root.packagesFilter === "pacnew" ? root.pacnewFiles : root.packages
           delegate: Rectangle {
             required property var modelData
+            readonly property bool isPacnew: root.packagesFilter === "pacnew"
             width: ListView.view.width
             height: root.rowHeight
             color: "transparent"
@@ -287,7 +293,9 @@ Panel {
               Text {
                 width: packageInfoCol.width
                 elide: Text.ElideRight
-                text: Model.formatMib(modelData.sizeMb) + " · installed " + modelData.date + " · used " + modelData.lastUsed
+                text: isPacnew
+                  ? Model.formatBytes(modelData.bytes) + " · " + modelData.path
+                  : Model.formatMib(modelData.sizeMb) + " · installed " + modelData.date + " · used " + modelData.lastUsed
                 color: Qt.darker(root.contentForeground, 1.5)
                 font.family: root.contentFontFamily
                 font.pixelSize: Style.font.caption
@@ -317,7 +325,9 @@ Panel {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.removePackage(modelData.name)
+                onClicked: isPacnew
+                  ? root.removePacnewFile(modelData.path, modelData.name)
+                  : root.removePackage(modelData.name)
               }
             }
           }
@@ -325,9 +335,12 @@ Panel {
 
         Text {
           anchors.centerIn: parent
-          visible: root.activeTab === "packages" && root.packages.length === 0
+          visible: root.activeTab === "packages"
+            && (root.packagesFilter === "pacnew" ? root.pacnewFiles.length === 0 : root.packages.length === 0)
           text: root.packagesFilter === "orphans"
             ? "No orphaned packages"
+            : root.packagesFilter === "pacnew"
+            ? "No .pacnew/.pacsave files found"
             : "No packages beyond the Omarchy defaults"
           color: Qt.darker(root.contentForeground, 1.5)
           font.family: root.contentFontFamily
@@ -634,6 +647,15 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.packages = Model.parsePackages(text)
+    }
+  }
+
+  Process {
+    id: pacnewProc
+    command: ["bash", root.backendPath, "packages-pacnew"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.pacnewFiles = Model.parsePacnewFiles(text)
     }
   }
 
