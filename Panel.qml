@@ -312,6 +312,7 @@ Panel {
               width: Style.space(72)
               height: Style.space(26)
               radius: Style.cornerRadius
+              opacity: root.busy ? 0.45 : 1.0
               color: removeMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
 
               Text {
@@ -325,6 +326,7 @@ Panel {
               MouseArea {
                 id: removeMouse
                 anchors.fill: parent
+                enabled: !root.busy
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: isPacnew
@@ -393,6 +395,7 @@ Panel {
               width: Style.space(72)
               height: Style.space(26)
               radius: Style.cornerRadius
+              opacity: root.busy ? 0.45 : 1.0
               color: removeWebappMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
 
               Text {
@@ -406,6 +409,7 @@ Panel {
               MouseArea {
                 id: removeWebappMouse
                 anchors.fill: parent
+                enabled: !root.busy
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.removeWebapp(modelData.name)
@@ -522,6 +526,7 @@ Panel {
               height: Style.space(26)
               radius: Style.cornerRadius
               visible: modelData.status === "enabled"
+              opacity: root.busy ? 0.45 : 1.0
               color: disableStartupMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
 
               Text {
@@ -535,6 +540,7 @@ Panel {
               MouseArea {
                 id: disableStartupMouse
                 anchors.fill: parent
+                enabled: !root.busy
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: root.disableStartupItem(modelData)
@@ -620,6 +626,7 @@ Panel {
               width: Style.space(72)
               height: Style.space(26)
               radius: Style.cornerRadius
+              opacity: root.busy ? 0.45 : 1.0
               color: cleanMouse.containsMouse
                 ? (modelData.action === "view" ? root.hoverRowFill : root.dangerHoverFill)
                 : root.normalRowFill
@@ -635,6 +642,7 @@ Panel {
               MouseArea {
                 id: cleanMouse
                 anchors.fill: parent
+                enabled: !root.busy
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: {
