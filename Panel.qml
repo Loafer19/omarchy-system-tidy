@@ -5,10 +5,6 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 
-// Tabbed audit panel: packages added on top of the Omarchy defaults, disk
-// cleanup targets, startup items (autostart + systemd user services), and
-// webapp launchers. Each tab shells out to scripts/backend.sh and lists
-// results with a one-click action.
 Panel {
   id: root
   moduleName: "yoyo.system-tidy"
@@ -25,6 +21,7 @@ Panel {
   property string packagesFilter: "extra"
   property string startupFilter: "autostart"
   property var packages: []
+  property bool packagesLoading: false
   property var pacnewFiles: []
   property var webapps: []
   property var autostartItems: []
@@ -38,9 +35,7 @@ Panel {
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color dividerColor: Qt.rgba(contentForeground.r, contentForeground.g, contentForeground.b, 0.12)
 
-  // Single edge-margin/padding value for every row and section gap in this
-  // panel, so spacing stays consistent in one place instead of scattered
-  // ad-hoc numbers.
+  // Single spacing value instead of scattered ad-hoc numbers.
   readonly property int edgeMargin: Style.space(6)
   readonly property int rowGap: 0
   readonly property int rowHeight: Style.space(44)
@@ -69,8 +64,12 @@ Panel {
   }
 
   function refreshAll() {
-    if (root.packagesFilter === "pacnew") pacnewProc.running = true
-    else packagesProc.running = true
+    if (root.packagesFilter === "pacnew") {
+      pacnewProc.running = true
+    } else {
+      root.packagesLoading = true
+      packagesProc.running = true
+    }
     webappsProc.running = true
     autostartProc.running = true
     systemdProc.running = true
@@ -91,8 +90,12 @@ Panel {
   function setPackagesFilter(key) {
     if (root.packagesFilter === key) return
     root.packagesFilter = key
-    if (key === "pacnew") pacnewProc.running = true
-    else packagesProc.running = true
+    if (key === "pacnew") {
+      pacnewProc.running = true
+    } else {
+      root.packagesLoading = true
+      packagesProc.running = true
+    }
   }
 
   function setStartupFilter(key) {
@@ -189,8 +192,7 @@ Panel {
 
           Behavior on opacity { NumberAnimation { duration: 150 } }
 
-          // Keeps showing the last message while it fades out, instead of
-          // snapping to blank the instant statusClearTimer clears the text.
+          // Keeps the last message visible while it fades out.
           Connections {
             target: root
             function onStatusTextChanged() {
@@ -335,7 +337,17 @@ Panel {
 
         Text {
           anchors.centerIn: parent
-          visible: root.activeTab === "packages"
+          visible: root.activeTab === "packages" && root.packagesFilter !== "pacnew"
+            && root.packagesLoading && root.packages.length === 0
+          text: "Loading…"
+          color: Qt.darker(root.contentForeground, 1.5)
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body
+        }
+
+        Text {
+          anchors.centerIn: parent
+          visible: root.activeTab === "packages" && !root.packagesLoading
             && (root.packagesFilter === "pacnew" ? root.pacnewFiles.length === 0 : root.packages.length === 0)
           text: root.packagesFilter === "orphans"
             ? "No orphaned packages"
@@ -646,7 +658,10 @@ Panel {
     command: ["bash", root.backendPath, root.packagesFilter === "orphans" ? "packages-orphans" : "packages-list"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.packages = Model.parsePackages(text)
+      onStreamFinished: {
+        root.packages = Model.parsePackages(text)
+        root.packagesLoading = false
+      }
     }
   }
 

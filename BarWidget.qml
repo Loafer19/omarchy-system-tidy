@@ -4,9 +4,8 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Bar entry point for System Tidy: a click opens the tabbed audit panel.
-// Follows the same bar-widget/panel split as the built-in clock widget —
-// this root owns the bar label, Panel.qml owns the floating content.
+// Same bar-widget/panel split as the built-in clock widget: this root
+// owns the bar label, Panel.qml owns the floating content.
 BarWidget {
   id: root
   moduleName: "yoyo.system-tidy"
@@ -63,10 +62,8 @@ BarWidget {
     function toggle(): void { root.toggle() }
   }
 
-  // Nerd Font "md-broom" glyph, rendered the same way every other first-party
-  // bar icon is (BarIconButton -> OpticalGlyph text), instead of a rasterized
-  // SVG + MultiEffect recolor — matches neighboring icons' weight/brightness
-  // exactly since it's the same font-glyph rendering path they all use.
+  // Nerd Font "md-broom" glyph via BarIconButton, same as every other
+  // first-party bar icon — matches their weight/brightness exactly.
   BarIconButton {
     id: button
     anchors.fill: parent

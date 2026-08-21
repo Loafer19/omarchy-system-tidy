@@ -55,9 +55,8 @@ packages_remove() {
   ' _ "system-tidy: before removing $*" "$@"
 }
 
-# Leftover config files pacman drops on upgrade/removal when it won't
-# overwrite a locally-modified file. Listing needs no privilege (/etc is
-# world-readable); removing them does, since /etc itself is root-owned.
+# Leftover config files pacman drops on upgrade/removal. Listing needs no
+# privilege; removing does, since /etc is root-owned.
 packages_pacnew() {
   (find /etc -xdev \( -name "*.pacnew" -o -name "*.pacsave" -o -name "*.pacorig" \) 2>/dev/null || true) | sort | while read -r f; do
     [ -f "$f" ] || continue
@@ -68,6 +67,12 @@ packages_pacnew() {
 
 packages_pacnew_remove() {
   [ "$#" -eq 0 ] && exit 0
+  # Defense in depth: a privileged delete shouldn't trust its argument
+  # just because the only real caller is our own listing.
+  case "$1" in
+    /etc/*.pacnew | /etc/*.pacsave | /etc/*.pacorig) ;;
+    *) exit 1 ;;
+  esac
   pkexec rm -f "$1"
 }
 
@@ -105,26 +110,31 @@ autostart_list() {
 autostart_disable() {
   [ "$#" -eq 0 ] && exit 0
   local name="$1"
-  local target="$HOME/.config/autostart/$name.desktop"
-  mkdir -p "$HOME/.config/autostart"
-  if [ -f "$target" ]; then
-    if ! grep -q '^Hidden=' "$target"; then
-      printf 'Hidden=true\n' >> "$target"
+  local dir="$HOME/.config/autostart"
+  local target="$dir/$name.desktop"
+  mkdir -p "$dir"
+
+  # Write to a temp file and rename it into place — rename(2) replaces
+  # whatever's at $target without following it, so there's no race window.
+  local tmp
+  tmp=$(mktemp "$dir/.tidy-tmp.XXXXXX") || exit 1
+
+  if [ -f "$target" ] && [ ! -L "$target" ]; then
+    if grep -q '^Hidden=' "$target" 2>/dev/null; then
+      sed 's/^Hidden=.*/Hidden=true/' "$target" > "$tmp"
     else
-      sed -i 's/^Hidden=.*/Hidden=true/' "$target"
+      cat "$target" > "$tmp"
+      printf 'Hidden=true\n' >> "$tmp"
     fi
   else
-    printf '[Desktop Entry]\nHidden=true\n' > "$target"
+    printf '[Desktop Entry]\nHidden=true\n' > "$tmp"
   fi
+
+  mv -f "$tmp" "$target"
 }
 
-# Scoped to units whose unit file actually lives under
-# ~/.config/systemd/user/ — excludes vendor-shipped units (audio stack,
-# keyring, crash-watch, etc. under /usr/lib/systemd/user/) so this can
-# never offer to disable something the desktop session depends on.
-# Masked units (state=masked) and install-less units (state=static, e.g.
-# services a plugin starts on demand rather than at login) are excluded
-# for free since only state=enabled is queried.
+# Scoped to units under ~/.config/systemd/user/ only, so vendor-shipped
+# units (audio, keyring, etc.) never show up here to be disabled.
 systemd_user_list() {
   command -v systemctl >/dev/null 2>&1 || return 0
   local unit path
@@ -146,6 +156,15 @@ systemd_user_disable() {
 
 dir_size_mb() {
   du -sm "$1" 2>/dev/null | cut -f1 || true
+}
+
+# Refuses a symlinked path — a plain `rm -rf "$d"/*` would otherwise
+# follow it and delete whatever it actually points to.
+safe_clear_dir() {
+  local d="$1"
+  [ -L "$d" ] && return 0
+  [ -d "$d" ] || return 0
+  rm -rf "${d:?}"/*
 }
 
 docker_size_mb() {
@@ -228,18 +247,17 @@ cleanup_status() {
 }
 
 dev_cache_clean() {
-  # Clear the cache directories directly rather than shelling out to each
-  # tool's own "clean" command — those no-op (or aren't even on PATH) when
-  # the tool was installed via a version manager outside this process's
-  # environment, leaving the cache untouched despite reporting success.
-  rm -rf "$HOME/.cache/pip/"* "$HOME/.npm/"* "$HOME/.cargo/registry/"*
-  # Go marks module cache entries read-only; strip that first so rm doesn't
-  # stop partway through (this is what `go clean -modcache` does internally
-  # — done directly so it works even without `go` on PATH).
-  if [ -d "$HOME/go/pkg/mod" ]; then
+  # Clear directly rather than each tool's own "clean" command — those
+  # no-op silently when the tool isn't on this process's PATH.
+  safe_clear_dir "$HOME/.cache/pip"
+  safe_clear_dir "$HOME/.npm"
+  safe_clear_dir "$HOME/.cargo/registry"
+  # Go marks module cache entries read-only; strip that first or rm stops
+  # partway through.
+  if [ -d "$HOME/go/pkg/mod" ] && [ ! -L "$HOME/go/pkg/mod" ]; then
     chmod -R u+w "$HOME/go/pkg/mod" 2>/dev/null || true
-    rm -rf "$HOME/go/pkg/mod/"*
   fi
+  safe_clear_dir "$HOME/go/pkg/mod"
   return 0
 }
 
@@ -247,10 +265,19 @@ cleanup_run() {
   case "$1" in
     pacman) pkexec paccache -r -u -k0 ;;
     coredump) pkexec rm -rf /var/lib/systemd/coredump/* ;;
-    trash) rm -rf "$HOME/.local/share/Trash/files/"* "$HOME/.local/share/Trash/info/"* ;;
+    trash)
+      safe_clear_dir "$HOME/.local/share/Trash/files"
+      safe_clear_dir "$HOME/.local/share/Trash/info"
+      ;;
     docker) docker system prune -f ;;
-    browser) rm -rf "$HOME/.cache/google-chrome/"* "$HOME/.cache/chromium/"* ;;
-    aur) rm -rf "$HOME/.cache/yay/"* "$HOME/.cache/paru/"* ;;
+    browser)
+      safe_clear_dir "$HOME/.cache/google-chrome"
+      safe_clear_dir "$HOME/.cache/chromium"
+      ;;
+    aur)
+      safe_clear_dir "$HOME/.cache/yay"
+      safe_clear_dir "$HOME/.cache/paru"
+      ;;
     dev) dev_cache_clean ;;
     journal) pkexec journalctl --vacuum-size=100M ;;
     *) exit 1 ;;
