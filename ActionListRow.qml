@@ -1,9 +1,10 @@
 import QtQuick
 import qs.Commons
+import qs.Ui
 
 // Title + optional subtitle with a right-edge text action (Remove/Clean/…).
-// Fill-only hover like ChipRow — stock Button would also paint a hover border.
-Item {
+// Row chrome comes from CursorSurface (hasCursor), never from containsMouse.
+CursorSurface {
   id: root
 
   property string title: ""
@@ -19,13 +20,26 @@ Item {
   property int rowHeight: Style.space(44)
 
   signal actionClicked()
+  signal rowHovered()
 
   height: rowHeight
+  foreground: contentForeground
+  fill: Style.hoverFillFor(contentForeground, Color.accent, Color.urgent)
+  // Outline-free cursor so we don't double up with the light chip language.
+  bordered: false
 
-  readonly property color normalFill: Style.normalFillFor(contentForeground, Color.accent, Color.urgent)
-  readonly property color hoverFill: danger
+  readonly property color actionNormalFill: Style.normalFillFor(contentForeground, Color.accent, Color.urgent)
+  readonly property color actionHoverFill: danger
     ? Util.alpha(Color.urgent, Style.hoverFillAlpha)
     : Style.hoverFillFor(contentForeground, Color.accent, Color.urgent)
+
+  // Hover only — clicks stay on the action button (and keyboard Enter).
+  MouseArea {
+    anchors.fill: parent
+    hoverEnabled: true
+    acceptedButtons: Qt.NoButton
+    onContainsMouseChanged: if (containsMouse) root.rowHovered()
+  }
 
   Column {
     id: infoCol
@@ -35,6 +49,7 @@ Item {
     anchors.rightMargin: root.edgeMargin
     anchors.verticalCenter: parent.verticalCenter
     spacing: Style.space(2)
+    z: 1
 
     Text {
       width: infoCol.width
@@ -62,12 +77,13 @@ Item {
     anchors.right: parent.right
     anchors.rightMargin: root.edgeMargin
     anchors.verticalCenter: parent.verticalCenter
+    z: 2
     visible: root.actionVisible && root.actionLabel !== ""
     width: Style.space(72)
     height: Style.space(26)
     radius: Style.cornerRadius
     opacity: root.actionEnabled ? 1.0 : 0.45
-    color: actionMouse.containsMouse && root.actionEnabled ? root.hoverFill : root.normalFill
+    color: actionMouse.containsMouse && root.actionEnabled ? root.actionHoverFill : root.actionNormalFill
 
     Text {
       anchors.centerIn: parent
@@ -83,6 +99,7 @@ Item {
       enabled: root.actionEnabled
       hoverEnabled: true
       cursorShape: root.actionEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+      onContainsMouseChanged: if (containsMouse) root.rowHovered()
       onClicked: root.actionClicked()
     }
   }

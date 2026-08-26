@@ -53,11 +53,32 @@ function parseAgents(text) {
 
 function parseCleanupStatus(text) {
   var rows = parseTsvRows(text, ["key", "mb"])
-  var result = { pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, agents: 0, journal: 0, orphans_count: 0, orphans_mb: 0 }
+  var result = { pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, agents: 0, mise: 0, journal: 0, orphans_count: 0, orphans_mb: 0 }
   for (var i = 0; i < rows.length; i++) {
     if (result.hasOwnProperty(rows[i].key)) result[rows[i].key] = parseFloat(rows[i].mb) || 0
   }
   return result
+}
+
+function parseLastUsed(text) {
+  var rows = parseTsvRows(text, ["name", "lastUsed"])
+  var map = {}
+  for (var i = 0; i < rows.length; i++) map[rows[i].name] = rows[i].lastUsed
+  return map
+}
+
+function withLastUsed(packages, lastUsedMap) {
+  var out = []
+  for (var i = 0; i < packages.length; i++) {
+    var p = packages[i]
+    out.push({
+      name: p.name,
+      sizeMb: p.sizeMb,
+      date: p.date,
+      lastUsed: lastUsedMap[p.name] !== undefined ? lastUsedMap[p.name] : (p.lastUsed || "")
+    })
+  }
+  return out
 }
 
 function formatMib(mb) {

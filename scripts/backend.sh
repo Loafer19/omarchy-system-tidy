@@ -24,14 +24,15 @@ package_last_used() {
   [ "$days" -le 0 ] && echo "today" || echo "${days}d ago"
 }
 
+# Fast path: size + install date only. last-used is expensive (pacman -Ql +
+# atime per file) so the panel fills it in later via packages-last-used.
 describe_packages() {
   while read -r pkg; do
     [ -z "$pkg" ] && continue
-    local size date used
+    local size date
     size=$(expac -H M '%m' "$pkg" 2>/dev/null || echo "0")
     date=$(grep -a "installed $pkg " /var/log/pacman.log 2>/dev/null | tail -1 | cut -d']' -f1 | tr -d '[' | cut -dT -f1 || true)
-    used=$(package_last_used "$pkg")
-    printf '%s\t%s\t%s\t%s\n' "$pkg" "${size:-0}" "${date:-unknown}" "$used"
+    printf '%s\t%s\t%s\t%s\n' "$pkg" "${size:-0}" "${date:-unknown}" ""
   done
   return 0
 }
@@ -47,13 +48,32 @@ packages_orphans() {
   (pacman -Qtdq 2>/dev/null || true) | sort -u | describe_packages
 }
 
+# Args: package names. Prints name\tlastUsed per line.
+packages_last_used() {
+  local pkg
+  for pkg in "$@"; do
+    [ -z "$pkg" ] && continue
+    printf '%s\t%s\n' "$pkg" "$(package_last_used "$pkg")"
+  done
+  return 0
+}
+
 packages_remove() {
   [ "$#" -eq 0 ] && exit 0
-  pkexec bash -c '
-    command -v snapper >/dev/null 2>&1 && snapper create -c number -d "$1" >/dev/null 2>&1
-    shift
-    exec pacman -Rns --noconfirm "$@"
-  ' _ "system-tidy: before removing $*" "$@"
+  # Prefer Omarchy's multi-config snapper wrapper (same as updates). Falls
+  # back to a single snapper create when the helper is missing. Snapshot
+  # failure must not block the remove.
+  pkexec env PATH="/usr/share/omarchy/bin:/usr/bin:/bin:$PATH" \
+    OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}" \
+    bash -c '
+      if command -v omarchy-snapshot >/dev/null 2>&1; then
+        omarchy-snapshot create >/dev/null 2>&1 || true
+      elif command -v snapper >/dev/null 2>&1; then
+        snapper create -c number -d "$1" >/dev/null 2>&1 || true
+      fi
+      shift
+      exec pacman -Rns --noconfirm "$@"
+    ' _ "system-tidy: before removing $*" "$@"
 }
 
 # Leftover config files pacman drops on upgrade/removal. Listing needs no
@@ -133,6 +153,15 @@ autostart_list() {
 autostart_disable() {
   [ "$#" -eq 0 ] && exit 0
   local name="$1"
+  # Strip any .desktop suffix / path bits; reject escapes out of autostart/.
+  name=$(basename -- "$name")
+  name=${name%.desktop}
+  case "$name" in
+    "" | .* | *..* | */*) exit 1 ;;
+  esac
+  # basename already strips directories; still refuse embedded slashes if any remain.
+  [[ "$name" != *$'\n'* && "$name" != *'/'* ]] || exit 1
+
   local dir="$HOME/.config/autostart"
   local target="$dir/$name.desktop"
   mkdir -p "$dir"
@@ -434,6 +463,32 @@ agents_cache_clean() {
   return 0
 }
 
+# Download cache + installed versions `mise prune` would delete.
+mise_unused_mb() {
+  command -v mise >/dev/null 2>&1 || { echo 0; return; }
+  local total=0 size path tool ver
+  size=$(dir_size_mb "${XDG_CACHE_HOME:-$HOME/.cache}/mise")
+  total=$((total + ${size:-0}))
+
+  while read -r tool ver _; do
+    [ -z "${tool:-}" ] || [ -z "${ver:-}" ] && continue
+    [[ "$tool" == "#"* ]] && continue
+    path=$(mise where "${tool}@${ver}" 2>/dev/null || true)
+    [ -n "$path" ] || continue
+    size=$(dir_size_mb "$path")
+    total=$((total + ${size:-0}))
+  done < <(mise ls --prunable --installed --no-header 2>/dev/null || true)
+
+  echo "$total"
+}
+
+mise_unused_clean() {
+  command -v mise >/dev/null 2>&1 || return 0
+  mise prune -y >/dev/null 2>&1 || true
+  mise cache clear >/dev/null 2>&1 || true
+  return 0
+}
+
 cleanup_status() {
   printf 'pacman\t%s\n' "$(dir_size_mb /var/cache/pacman/pkg/)"
   printf 'coredump\t%s\n' "$(dir_size_mb /var/lib/systemd/coredump/)"
@@ -443,6 +498,7 @@ cleanup_status() {
   printf 'aur\t%s\n' "$(aur_cache_mb)"
   printf 'dev\t%s\n' "$(dev_cache_mb)"
   printf 'agents\t%s\n' "$(agents_cache_mb)"
+  printf 'mise\t%s\n' "$(mise_unused_mb)"
   printf 'journal\t%s\n' "$(journal_size_mb)"
   printf 'orphans_count\t%s\n' "$(orphans_count)"
   printf 'orphans_mb\t%s\n' "$(orphans_size_mb)"
@@ -482,6 +538,7 @@ cleanup_run() {
       ;;
     dev) dev_cache_clean ;;
     agents) agents_cache_clean ;;
+    mise) mise_unused_clean ;;
     journal) pkexec journalctl --vacuum-size=100M ;;
     *) exit 1 ;;
   esac
@@ -492,6 +549,7 @@ shift || true
 case "$cmd" in
   packages-list) packages_list ;;
   packages-orphans) packages_orphans ;;
+  packages-last-used) packages_last_used "$@" ;;
   packages-remove) packages_remove "$@" ;;
   packages-pacnew) packages_pacnew ;;
   packages-pacnew-remove) packages_pacnew_remove "$@" ;;

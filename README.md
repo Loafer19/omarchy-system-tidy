@@ -1,44 +1,31 @@
 # System Tidy — system cleanup for Omarchy
 
-A bar widget for [Omarchy](https://github.com/basecamp/omarchy) that shows
-what's cluttering your system and lets you clean it in one panel.
+A bar widget for [Omarchy](https://github.com/basecamp/omarchy) that audits
+clutter and cleans it from one panel.
 
 ![Cleanup tab](preview.png)
 
-Click the broom in the bar:
+Click the broom:
 
-- **Packages** — everything installed beyond Omarchy's defaults, with size,
-  install date, and last-used time. Toggle **Orphans** for packages nothing
-  depends on anymore, **Pacnew** for `.pacnew`/`.pacsave`/`.pacorig`
-  leftovers pacman drops under `/etc` on upgrade, or **Agent CLIs** for
-  coding tools Omarchy ships via mise (Claude Code, Codex, Grok, Pi, …).
-  Package removal is `pacman -Rns` (only that package's own deps go with it),
-  snapshotted via `snapper` first when it's set up. Removing an agent CLI
-  uninstalls the mise tool and stub launcher; session history stays until
-  you clear it under Cleanup → Agent caches.
-- **Cleanup** — pacman cache, AUR build cache (yay/paru), dev tool caches
-  (pip/npm/cargo/go), agent caches (Claude/Codex/Pi/OpenCode/… chat history
-  and tmp — login and settings stay), Docker (`prune -f` — stopped
-  containers and dangling images only; tagged images stay), Chrome/Chromium
-  page cache, coredumps, journal logs, trash, plus an orphan-packages
-  summary linking back to Packages.
-- **Startup** — what starts automatically, one-click disable. **Autostart**
-  chip covers user + system `.desktop` entries; **Services** covers systemd
-  `--user` units you (or something you installed) enabled yourself — scoped
-  to `~/.config/systemd/user/` only, so vendor-shipped session units (audio,
-  keyring, etc.) never show up here and there's nothing to break.
-- **Launchers** — `.desktop` launchers, one-click remove. **Web Apps** chip
-  covers `omarchy webapp install` (Discord, WhatsApp, YouTube, and anything
-  you added); **TUIs** covers `omarchy tui install` wrappers (Disk Usage,
-  Docker, and the rest).
+- **Packages** — **Added** (beyond Omarchy defaults), **Orphans**, **Pacnew**
+  (`.pacnew`/`.pacsave`/`.pacorig`), and **Agent CLIs** (mise tools like Claude
+  Code, Codex, Grok). Package remove uses `pacman -Rns` after
+  `omarchy snapshot create`. Agent remove drops the tool; session history
+  stays until Cleanup → Agent caches.
+- **Cleanup** — pacman/AUR/dev caches, agent chat history & tmp (login stays),
+  Mise unused (`mise prune` + download cache), Docker prune (no `-a`),
+  Chrome/Chromium cache, coredumps, journal, trash. Clean is disabled at 0 MiB.
+- **Startup** — **Autostart** `.desktop` entries and **Services** (only units
+  under `~/.config/systemd/user/`).
+- **Launchers** — **Web Apps** and **TUIs** from `omarchy webapp|tui install`.
 
-Status line shows Done/Failed for a couple seconds after every action.
+Keyboard: **Tab** cycles tabs; **h/l** chips; **j/k** rows; **Enter** acts.
+Status shows Done/Failed briefly after each action.
 
 ## Requirements
 
-Stock Omarchy plus `pacman-contrib`. Package removal, pacnew cleanup,
-pacman cache trim, coredump, and journal cleanup ask for your password
-(`pkexec`); everything else runs as your own user.
+Stock Omarchy + `pacman-contrib`. Package remove, pacnew, paccache, coredump,
+and journal ask for a password (`pkexec`).
 
 ## Install
 
