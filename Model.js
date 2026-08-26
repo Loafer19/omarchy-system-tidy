@@ -20,18 +20,23 @@ function parsePackages(text) {
   return rows
 }
 
+function sortByName(rows) {
+  rows.sort(function(a, b) { return String(a.name).localeCompare(String(b.name)) })
+  return rows
+}
+
 function parseNameList(text) {
-  return String(text || "").split("\n").filter(function(l) { return l.trim() !== "" }).map(function(name) {
+  return sortByName(String(text || "").split("\n").filter(function(l) { return l.trim() !== "" }).map(function(name) {
     return { name: name }
-  })
+  }))
 }
 
 function parseAutostart(text) {
-  return parseTsvRows(text, ["name", "status", "source"])
+  return sortByName(parseTsvRows(text, ["name", "status", "source"]))
 }
 
 function parseSystemdUnits(text) {
-  return parseTsvRows(text, ["name", "status", "type"])
+  return sortByName(parseTsvRows(text, ["name", "status", "type"]))
 }
 
 function parsePacnewFiles(text) {

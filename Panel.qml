@@ -24,15 +24,55 @@ Panel {
   property var packages: []
   property bool packagesLoading: false
   property var pacnewFiles: []
+  property bool pacnewLoading: false
   property var agents: []
+  property bool agentsLoading: false
   property var webapps: []
+  property bool webappsLoading: false
   property var tuis: []
+  property bool tuisLoading: false
   property var autostartItems: []
+  property bool autostartLoading: false
   property var systemdUnits: []
+  property bool systemdLoading: false
   property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, agents: 0, journal: 0, orphans_count: 0, orphans_mb: 0 })
   property bool busy: false
   property string statusText: ""
   property string statusKind: "progress" // "progress" | "done" | "error"
+
+  readonly property bool packagesViewLoading: {
+    if (root.packagesFilter === "pacnew") return root.pacnewLoading
+    if (root.packagesFilter === "agents") return root.agentsLoading
+    return root.packagesLoading
+  }
+  readonly property bool packagesViewEmpty: {
+    if (root.packagesFilter === "pacnew") return root.pacnewFiles.length === 0
+    if (root.packagesFilter === "agents") return root.agents.length === 0
+    return root.packages.length === 0
+  }
+  readonly property bool launchersViewLoading: root.launchersFilter === "tuis" ? root.tuisLoading : root.webappsLoading
+  readonly property bool startupViewLoading: root.startupFilter === "services" ? root.systemdLoading : root.autostartLoading
+
+  // Cleanable rows largest-first; Orphans stays last as a View cross-link.
+  readonly property var cleanupRows: {
+    var rows = [
+      { key: "pacman", label: "Pacman cache", action: "clean", note: "Only cached packages you've already removed" },
+      { key: "aur", label: "AUR build cache", action: "clean", note: "yay/paru build artifacts, safe to delete" },
+      { key: "dev", label: "Dev tool caches", action: "clean", note: "pip, npm, cargo, go — all rebuild on demand" },
+      { key: "agents", label: "Agent caches", action: "clean", note: "Chat history & tmp — keeps login and settings" },
+      { key: "docker", label: "Docker (prune)", action: "clean", note: "Stopped containers & dangling images only" },
+      { key: "browser", label: "Browser cache", action: "clean", note: "Chrome/Chromium page cache — won't log you out" },
+      { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete" },
+      { key: "journal", label: "Journal logs", action: "clean", note: "Keeps the latest 100 MiB" },
+      { key: "trash", label: "Trash", action: "clean", note: "Empties the Trash folder" }
+    ]
+    var status = root.cleanupStatus
+    rows.sort(function(a, b) {
+      return (parseFloat(status[b.key]) || 0) - (parseFloat(status[a.key]) || 0)
+    })
+    rows.push({ key: "orphans", label: "Orphan packages", action: "view", note: "Nothing depends on these — opens Packages → Orphans" })
+    return rows
+  }
 
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
@@ -43,16 +83,28 @@ Panel {
   readonly property int rowGap: 0
   readonly property int rowHeight: Style.space(44)
 
-  readonly property color normalRowFill: Style.normalFillFor(contentForeground, Color.accent, Color.urgent)
-  readonly property color hoverRowFill: Style.hoverFillFor(contentForeground, Color.accent, Color.urgent)
-  readonly property color selectedRowFill: Style.selectedFillFor(contentForeground, Color.accent, Color.urgent)
-  readonly property color dangerHoverFill: Util.alpha(Color.urgent, Style.hoverFillAlpha)
-
   readonly property var tabs: [
     { key: "packages", label: "Packages" },
     { key: "cleanup", label: "Cleanup" },
     { key: "startup", label: "Startup" },
     { key: "launchers", label: "Launchers" }
+  ]
+
+  readonly property var packagesChips: [
+    { key: "extra", label: "Added" },
+    { key: "orphans", label: "Orphans" },
+    { key: "pacnew", label: "Pacnew" },
+    { key: "agents", label: "Agent CLIs" }
+  ]
+
+  readonly property var launchersChips: [
+    { key: "webapps", label: "Web Apps" },
+    { key: "tuis", label: "TUIs" }
+  ]
+
+  readonly property var startupChips: [
+    { key: "autostart", label: "Autostart" },
+    { key: "services", label: "Services" }
   ]
 
   readonly property var startupItems: {
@@ -79,13 +131,19 @@ Panel {
 
   function refreshAll() {
     if (root.packagesFilter === "pacnew") {
+      root.pacnewLoading = true
       pacnewProc.running = true
     } else if (root.packagesFilter === "agents") {
+      root.agentsLoading = true
       agentsProc.running = true
     } else {
       root.packagesLoading = true
       packagesProc.running = true
     }
+    root.webappsLoading = true
+    root.tuisLoading = true
+    root.autostartLoading = true
+    root.systemdLoading = true
     webappsProc.running = true
     tuisProc.running = true
     autostartProc.running = true
@@ -108,8 +166,10 @@ Panel {
     if (root.packagesFilter === key) return
     root.packagesFilter = key
     if (key === "pacnew") {
+      root.pacnewLoading = true
       pacnewProc.running = true
     } else if (key === "agents") {
+      root.agentsLoading = true
       agentsProc.running = true
     } else {
       root.packagesLoading = true
@@ -127,7 +187,7 @@ Panel {
 
   function removePackage(name) { runAction(["packages-remove", name], "Snapshotting + removing " + name + "…") }
   function removePacnewFile(path, name) { runAction(["packages-pacnew-remove", path], "Removing " + name + "…") }
-  function removeAgent(id, name) { runAction(["agents-remove", id], "Removing " + name + "…") }
+  function removeAgent(id, name) { runAction(["agents-remove", id], "Removing " + name + " (keeps sessions)…") }
   function removeWebapp(name) { runAction(["webapps-remove", name], "Removing " + name + "…") }
   function removeTui(name) { runAction(["tui-remove", name], "Removing " + name + "…") }
   function removeLauncherItem(item) {
@@ -140,7 +200,13 @@ Panel {
     if (item.kind === "systemd") root.disableSystemdUnit(item.name)
     else root.disableAutostart(item.name)
   }
-  function runCleanup(target) { runAction(["cleanup-run", target], "Cleaning " + target + "…") }
+  function cleanupLabel(key) {
+    for (var i = 0; i < root.cleanupRows.length; i++) {
+      if (root.cleanupRows[i].key === key) return root.cleanupRows[i].label
+    }
+    return key
+  }
+  function runCleanup(target) { runAction(["cleanup-run", target], "Cleaning " + root.cleanupLabel(target) + "…") }
 
   KeyboardPanel {
     id: panel
@@ -165,42 +231,12 @@ Panel {
         anchors.right: parent.right
         spacing: Style.space(8)
 
-        Row {
-          spacing: Style.space(4)
-
-          Repeater {
-            model: root.tabs
-
-            Rectangle {
-              required property var modelData
-              width: tabLabel.implicitWidth + Style.space(20)
-              height: Style.space(28)
-              radius: Style.cornerRadius
-              color: root.activeTab === modelData.key
-                ? root.selectedRowFill
-                : (tabMouse.containsMouse ? root.hoverRowFill : "transparent")
-              border.width: root.activeTab === modelData.key ? 0 : Style.spacing.hairline
-              border.color: root.dividerColor
-
-              Text {
-                id: tabLabel
-                anchors.centerIn: parent
-                text: modelData.label
-                color: root.activeTab === modelData.key ? root.contentForeground : Qt.darker(root.contentForeground, 1.5)
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.body
-                font.bold: root.activeTab === modelData.key
-              }
-
-              MouseArea {
-                id: tabMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.activeTab = modelData.key
-              }
-            }
-          }
+        ChipRow {
+          chips: root.tabs
+          selectedKey: root.activeTab
+          foreground: root.contentForeground
+          fontFamily: root.contentFontFamily
+          onSelected: function(key) { root.activeTab = key }
         }
 
         Rectangle { width: parent.width; height: Style.spacing.hairline; color: root.dividerColor }
@@ -239,52 +275,17 @@ Panel {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 
-        Row {
+        ChipRow {
           id: packagesFilterRow
           visible: root.activeTab === "packages"
           anchors.top: parent.top
           anchors.left: parent.left
-          height: Style.space(24)
-          spacing: root.edgeMargin
-
-          Repeater {
-            model: [
-              { key: "extra", label: "Extra" },
-              { key: "orphans", label: "Orphans" },
-              { key: "pacnew", label: "Pacnew" },
-              { key: "agents", label: "Agents" }
-            ]
-
-            Rectangle {
-              required property var modelData
-              readonly property bool selected: root.packagesFilter === modelData.key
-              width: filterLabel.implicitWidth + Style.space(16)
-              height: Style.space(24)
-              radius: Style.cornerRadius
-              color: selected
-                ? root.selectedRowFill
-                : (filterMouse.containsMouse ? root.hoverRowFill : "transparent")
-              border.width: selected ? 0 : Style.spacing.hairline
-              border.color: root.dividerColor
-
-              Text {
-                id: filterLabel
-                anchors.centerIn: parent
-                text: modelData.label
-                color: selected ? root.contentForeground : Qt.darker(root.contentForeground, 1.5)
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              MouseArea {
-                id: filterMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.setPackagesFilter(modelData.key)
-              }
-            }
-          }
+          compact: true
+          chips: root.packagesChips
+          selectedKey: root.packagesFilter
+          foreground: root.contentForeground
+          fontFamily: root.contentFontFamily
+          onSelected: function(key) { root.setPackagesFilter(key) }
         }
 
         ListView {
@@ -299,86 +300,35 @@ Panel {
           model: root.packagesFilter === "pacnew" ? root.pacnewFiles
             : root.packagesFilter === "agents" ? root.agents
             : root.packages
-          delegate: Rectangle {
+          delegate: ActionListRow {
             required property var modelData
             readonly property bool isPacnew: root.packagesFilter === "pacnew"
             readonly property bool isAgent: root.packagesFilter === "agents"
             width: ListView.view.width
-            height: root.rowHeight
-            color: "transparent"
-
-            Column {
-              id: packageInfoCol
-              anchors.left: parent.left
-              anchors.leftMargin: root.edgeMargin
-              anchors.right: removeBtn.left
-              anchors.rightMargin: root.edgeMargin
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-
-              Text {
-                width: packageInfoCol.width
-                elide: Text.ElideRight
-                text: modelData.name
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-              }
-              Text {
-                width: packageInfoCol.width
-                elide: Text.ElideRight
-                text: isPacnew
-                  ? Model.formatBytes(modelData.bytes) + " · " + modelData.path
-                  : isAgent
-                  ? Model.formatMib(modelData.sizeMb) + " · " + modelData.detail
-                  : Model.formatMib(modelData.sizeMb) + " · installed " + modelData.date + " · used " + modelData.lastUsed
-                color: Qt.darker(root.contentForeground, 1.5)
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-            }
-
-            Rectangle {
-              id: removeBtn
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.rightMargin: root.edgeMargin
-              width: Style.space(72)
-              height: Style.space(26)
-              radius: Style.cornerRadius
-              opacity: root.busy ? 0.45 : 1.0
-              color: removeMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
-
-              Text {
-                anchors.centerIn: parent
-                text: "Remove"
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              MouseArea {
-                id: removeMouse
-                anchors.fill: parent
-                enabled: !root.busy
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                  if (isPacnew) root.removePacnewFile(modelData.path, modelData.name)
-                  else if (isAgent) root.removeAgent(modelData.id, modelData.name)
-                  else root.removePackage(modelData.name)
-                }
-              }
+            rowHeight: root.rowHeight
+            edgeMargin: root.edgeMargin
+            contentForeground: root.contentForeground
+            contentFontFamily: root.contentFontFamily
+            title: modelData.name
+            subtitle: isPacnew
+              ? Model.formatBytes(modelData.bytes) + " · " + modelData.path
+              : isAgent
+              ? Model.formatMib(modelData.sizeMb) + " · " + modelData.detail
+              : Model.formatMib(modelData.sizeMb) + " · installed " + modelData.date + " · used " + modelData.lastUsed
+            actionLabel: "Remove"
+            actionEnabled: !root.busy
+            danger: true
+            onActionClicked: {
+              if (isPacnew) root.removePacnewFile(modelData.path, modelData.name)
+              else if (isAgent) root.removeAgent(modelData.id, modelData.name)
+              else root.removePackage(modelData.name)
             }
           }
         }
 
         Text {
           anchors.centerIn: parent
-          visible: root.activeTab === "packages"
-            && root.packagesFilter !== "pacnew" && root.packagesFilter !== "agents"
-            && root.packagesLoading && root.packages.length === 0
+          visible: root.activeTab === "packages" && root.packagesViewLoading && root.packagesViewEmpty
           text: "Loading…"
           color: Qt.darker(root.contentForeground, 1.5)
           font.family: root.contentFontFamily
@@ -387,67 +337,30 @@ Panel {
 
         Text {
           anchors.centerIn: parent
-          visible: root.activeTab === "packages" && (
-            root.packagesFilter === "pacnew" ? root.pacnewFiles.length === 0
-              : root.packagesFilter === "agents" ? root.agents.length === 0
-              : (!root.packagesLoading && root.packages.length === 0)
-          )
+          visible: root.activeTab === "packages" && !root.packagesViewLoading && root.packagesViewEmpty
           text: root.packagesFilter === "orphans"
             ? "No orphaned packages"
             : root.packagesFilter === "pacnew"
-            ? "No .pacnew/.pacsave files found"
+            ? "No .pacnew/.pacsave/.pacorig files found"
             : root.packagesFilter === "agents"
-            ? "No coding agents installed"
+            ? "No agent CLIs installed"
             : "No packages beyond the Omarchy defaults"
           color: Qt.darker(root.contentForeground, 1.5)
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
         }
 
-        Row {
+        ChipRow {
           id: launchersFilterRow
           visible: root.activeTab === "launchers"
           anchors.top: parent.top
           anchors.left: parent.left
-          height: Style.space(24)
-          spacing: root.edgeMargin
-
-          Repeater {
-            model: [
-              { key: "webapps", label: "Webapps" },
-              { key: "tuis", label: "TUIs" }
-            ]
-
-            Rectangle {
-              required property var modelData
-              readonly property bool selected: root.launchersFilter === modelData.key
-              width: launchersFilterLabel.implicitWidth + Style.space(16)
-              height: Style.space(24)
-              radius: Style.cornerRadius
-              color: selected
-                ? root.selectedRowFill
-                : (launchersFilterMouse.containsMouse ? root.hoverRowFill : "transparent")
-              border.width: selected ? 0 : Style.spacing.hairline
-              border.color: root.dividerColor
-
-              Text {
-                id: launchersFilterLabel
-                anchors.centerIn: parent
-                text: modelData.label
-                color: selected ? root.contentForeground : Qt.darker(root.contentForeground, 1.5)
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              MouseArea {
-                id: launchersFilterMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.setLaunchersFilter(modelData.key)
-              }
-            }
-          }
+          compact: true
+          chips: root.launchersChips
+          selectedKey: root.launchersFilter
+          foreground: root.contentForeground
+          fontFamily: root.contentFontFamily
+          onSelected: function(key) { root.setLaunchersFilter(key) }
         }
 
         ListView {
@@ -460,112 +373,52 @@ Panel {
           clip: true
           spacing: root.rowGap
           model: root.launchersItems
-          delegate: Rectangle {
+          delegate: ActionListRow {
             required property var modelData
             width: ListView.view.width
-            height: root.rowHeight
-            color: "transparent"
-
-            Text {
-              anchors.left: parent.left
-              anchors.leftMargin: root.edgeMargin
-              anchors.right: removeLauncherBtn.left
-              anchors.rightMargin: root.edgeMargin
-              anchors.verticalCenter: parent.verticalCenter
-              elide: Text.ElideRight
-              text: modelData.name
-              color: root.contentForeground
-              font.family: root.contentFontFamily
-              font.pixelSize: Style.font.body
-              font.bold: true
-            }
-
-            Rectangle {
-              id: removeLauncherBtn
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.rightMargin: root.edgeMargin
-              width: Style.space(72)
-              height: Style.space(26)
-              radius: Style.cornerRadius
-              opacity: root.busy ? 0.45 : 1.0
-              color: removeLauncherMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
-
-              Text {
-                anchors.centerIn: parent
-                text: "Remove"
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              MouseArea {
-                id: removeLauncherMouse
-                anchors.fill: parent
-                enabled: !root.busy
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.removeLauncherItem(modelData)
-              }
-            }
+            rowHeight: root.rowHeight
+            edgeMargin: root.edgeMargin
+            contentForeground: root.contentForeground
+            contentFontFamily: root.contentFontFamily
+            title: modelData.name
+            actionLabel: "Remove"
+            actionEnabled: !root.busy
+            danger: true
+            onActionClicked: root.removeLauncherItem(modelData)
           }
         }
 
         Text {
           anchors.centerIn: parent
-          visible: root.activeTab === "launchers" && root.launchersItems.length === 0
-          text: root.launchersFilter === "tuis"
-            ? "No TUI launchers installed"
-            : "No webapp launchers installed"
+          visible: root.activeTab === "launchers" && root.launchersViewLoading && root.launchersItems.length === 0
+          text: "Loading…"
           color: Qt.darker(root.contentForeground, 1.5)
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
         }
 
-        Row {
+        Text {
+          anchors.centerIn: parent
+          visible: root.activeTab === "launchers" && !root.launchersViewLoading && root.launchersItems.length === 0
+          text: root.launchersFilter === "tuis"
+            ? "No TUI launchers found"
+            : "No Web App launchers found"
+          color: Qt.darker(root.contentForeground, 1.5)
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body
+        }
+
+        ChipRow {
           id: startupFilterRow
           visible: root.activeTab === "startup"
           anchors.top: parent.top
           anchors.left: parent.left
-          height: Style.space(24)
-          spacing: root.edgeMargin
-
-          Repeater {
-            model: [
-              { key: "autostart", label: "Autostart" },
-              { key: "services", label: "Services" }
-            ]
-
-            Rectangle {
-              required property var modelData
-              readonly property bool selected: root.startupFilter === modelData.key
-              width: startupFilterLabel.implicitWidth + Style.space(16)
-              height: Style.space(24)
-              radius: Style.cornerRadius
-              color: selected
-                ? root.selectedRowFill
-                : (startupFilterMouse.containsMouse ? root.hoverRowFill : "transparent")
-              border.width: selected ? 0 : Style.spacing.hairline
-              border.color: root.dividerColor
-
-              Text {
-                id: startupFilterLabel
-                anchors.centerIn: parent
-                text: modelData.label
-                color: selected ? root.contentForeground : Qt.darker(root.contentForeground, 1.5)
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              MouseArea {
-                id: startupFilterMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.setStartupFilter(modelData.key)
-              }
-            }
-          }
+          compact: true
+          chips: root.startupChips
+          selectedKey: root.startupFilter
+          foreground: root.contentForeground
+          fontFamily: root.contentFontFamily
+          onSelected: function(key) { root.setStartupFilter(key) }
         }
 
         ListView {
@@ -578,75 +431,35 @@ Panel {
           clip: true
           spacing: root.rowGap
           model: root.startupItems
-          delegate: Rectangle {
+          delegate: ActionListRow {
             required property var modelData
             width: ListView.view.width
-            height: root.rowHeight
-            color: "transparent"
-
-            Column {
-              id: startupInfoCol
-              anchors.left: parent.left
-              anchors.leftMargin: root.edgeMargin
-              anchors.right: disableStartupBtn.left
-              anchors.rightMargin: root.edgeMargin
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-
-              Text {
-                width: startupInfoCol.width
-                elide: Text.ElideRight
-                text: modelData.name
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-              }
-              Text {
-                width: startupInfoCol.width
-                elide: Text.ElideRight
-                text: modelData.status + " · " + modelData.detail
-                color: Qt.darker(root.contentForeground, 1.5)
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-            }
-
-            Rectangle {
-              id: disableStartupBtn
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.rightMargin: root.edgeMargin
-              width: Style.space(72)
-              height: Style.space(26)
-              radius: Style.cornerRadius
-              visible: modelData.status === "enabled"
-              opacity: root.busy ? 0.45 : 1.0
-              color: disableStartupMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
-
-              Text {
-                anchors.centerIn: parent
-                text: "Disable"
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              MouseArea {
-                id: disableStartupMouse
-                anchors.fill: parent
-                enabled: !root.busy
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.disableStartupItem(modelData)
-              }
-            }
+            rowHeight: root.rowHeight
+            edgeMargin: root.edgeMargin
+            contentForeground: root.contentForeground
+            contentFontFamily: root.contentFontFamily
+            title: modelData.name
+            subtitle: modelData.status + " · " + modelData.detail
+            actionLabel: "Disable"
+            actionVisible: modelData.status === "enabled"
+            actionEnabled: !root.busy
+            danger: false
+            onActionClicked: root.disableStartupItem(modelData)
           }
         }
 
         Text {
           anchors.centerIn: parent
-          visible: root.activeTab === "startup" && root.startupItems.length === 0
+          visible: root.activeTab === "startup" && root.startupViewLoading && root.startupItems.length === 0
+          text: "Loading…"
+          color: Qt.darker(root.contentForeground, 1.5)
+          font.family: root.contentFontFamily
+          font.pixelSize: Style.font.body
+        }
+
+        Text {
+          anchors.centerIn: parent
+          visible: root.activeTab === "startup" && !root.startupViewLoading && root.startupItems.length === 0
           text: root.startupFilter === "services"
             ? "No user-added systemd services found"
             : "No autostart entries found"
@@ -660,95 +473,33 @@ Panel {
           visible: root.activeTab === "cleanup"
           clip: true
           spacing: root.rowGap
-          model: [
-            { key: "pacman", label: "Pacman cache", action: "clean", note: "Skips packages you still have installed" },
-            { key: "aur", label: "AUR build cache", action: "clean", note: "yay/paru build artifacts, safe to delete" },
-            { key: "dev", label: "Dev tool caches", action: "clean", note: "pip, npm, cargo, go — all rebuild on demand" },
-            { key: "agents", label: "Agent caches", action: "clean", note: "Sessions and tmp — keeps login and settings" },
-            { key: "docker", label: "Docker (prune)", action: "clean", note: "Leaves images you still use alone" },
-            { key: "browser", label: "Browser cache", action: "clean", note: "Just page cache — won't log you out" },
-            { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete" },
-            { key: "journal", label: "Journal logs", action: "clean", note: "Keeps the latest 100 MiB" },
-            { key: "trash", label: "Trash", action: "clean", note: "" },
-            { key: "orphans", label: "Orphan packages", action: "view", note: "Safe to remove — opens Packages → Orphans" }
-          ]
+          model: root.cleanupRows
 
-          delegate: Rectangle {
+          delegate: ActionListRow {
             required property var modelData
             width: ListView.view.width
-            height: root.rowHeight
-            color: "transparent"
-
-            Column {
-              id: contentCol
-              anchors.left: parent.left
-              anchors.leftMargin: root.edgeMargin
-              anchors.right: actionBtn.left
-              anchors.rightMargin: root.edgeMargin
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-
-              Text {
-                width: contentCol.width
-                text: modelData.key === "orphans"
-                  ? modelData.label + " (" + (root.cleanupStatus.orphans_count || 0) + ")"
-                  : modelData.label
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.body
-                font.bold: true
-              }
-
-              Text {
-                width: contentCol.width
-                elide: Text.ElideRight
-                text: {
-                  var size = modelData.key === "orphans"
-                    ? Model.formatMib(root.cleanupStatus.orphans_mb || 0)
-                    : Model.formatMib(root.cleanupStatus[modelData.key] || 0)
-                  return modelData.note !== "" ? size + " · " + modelData.note : size
-                }
-                color: Qt.darker(root.contentForeground, 1.5)
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
+            rowHeight: root.rowHeight
+            edgeMargin: root.edgeMargin
+            contentForeground: root.contentForeground
+            contentFontFamily: root.contentFontFamily
+            title: modelData.key === "orphans"
+              ? modelData.label + " (" + (root.cleanupStatus.orphans_count || 0) + ")"
+              : modelData.label
+            subtitle: {
+              var size = modelData.key === "orphans"
+                ? Model.formatMib(root.cleanupStatus.orphans_mb || 0)
+                : Model.formatMib(root.cleanupStatus[modelData.key] || 0)
+              return modelData.note !== "" ? size + " · " + modelData.note : size
             }
-
-            Rectangle {
-              id: actionBtn
-              anchors.right: parent.right
-              anchors.rightMargin: root.edgeMargin
-              anchors.verticalCenter: parent.verticalCenter
-              width: Style.space(72)
-              height: Style.space(26)
-              radius: Style.cornerRadius
-              opacity: root.busy ? 0.45 : 1.0
-              color: cleanMouse.containsMouse
-                ? (modelData.action === "view" ? root.hoverRowFill : root.dangerHoverFill)
-                : root.normalRowFill
-
-              Text {
-                anchors.centerIn: parent
-                text: modelData.action === "view" ? "View" : "Clean"
-                color: root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              MouseArea {
-                id: cleanMouse
-                anchors.fill: parent
-                enabled: !root.busy
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                  if (modelData.action === "view") {
-                    root.activeTab = "packages"
-                    root.setPackagesFilter("orphans")
-                  } else {
-                    root.runCleanup(modelData.key)
-                  }
-                }
+            actionLabel: modelData.action === "view" ? "View" : "Clean"
+            actionEnabled: !root.busy
+            danger: modelData.action !== "view"
+            onActionClicked: {
+              if (modelData.action === "view") {
+                root.activeTab = "packages"
+                root.setPackagesFilter("orphans")
+              } else {
+                root.runCleanup(modelData.key)
               }
             }
           }
@@ -774,7 +525,10 @@ Panel {
     command: ["bash", root.backendPath, "packages-pacnew"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.pacnewFiles = Model.parsePacnewFiles(text)
+      onStreamFinished: {
+        root.pacnewFiles = Model.parsePacnewFiles(text)
+        root.pacnewLoading = false
+      }
     }
   }
 
@@ -783,7 +537,10 @@ Panel {
     command: ["bash", root.backendPath, "agents-list"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.agents = Model.parseAgents(text)
+      onStreamFinished: {
+        root.agents = Model.parseAgents(text)
+        root.agentsLoading = false
+      }
     }
   }
 
@@ -792,7 +549,10 @@ Panel {
     command: ["bash", root.backendPath, "webapps-list"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.webapps = Model.parseNameList(text)
+      onStreamFinished: {
+        root.webapps = Model.parseNameList(text)
+        root.webappsLoading = false
+      }
     }
   }
 
@@ -801,7 +561,10 @@ Panel {
     command: ["bash", root.backendPath, "tui-list"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.tuis = Model.parseNameList(text)
+      onStreamFinished: {
+        root.tuis = Model.parseNameList(text)
+        root.tuisLoading = false
+      }
     }
   }
 
@@ -810,7 +573,10 @@ Panel {
     command: ["bash", root.backendPath, "autostart-list"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.autostartItems = Model.parseAutostart(text)
+      onStreamFinished: {
+        root.autostartItems = Model.parseAutostart(text)
+        root.autostartLoading = false
+      }
     }
   }
 
@@ -819,7 +585,10 @@ Panel {
     command: ["bash", root.backendPath, "systemd-list"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.systemdUnits = Model.parseSystemdUnits(text)
+      onStreamFinished: {
+        root.systemdUnits = Model.parseSystemdUnits(text)
+        root.systemdLoading = false
+      }
     }
   }
 
@@ -844,8 +613,14 @@ Panel {
     onExited: function(exitCode) {
       root.busy = false
       Qt.callLater(function() {
-        if (exitCode === 0) { root.statusText = "Done"; root.statusKind = "done" }
-        else if (root.statusText === "") { root.statusText = "Failed"; root.statusKind = "error" }
+        if (exitCode === 0) {
+          root.statusText = "Done"
+          root.statusKind = "done"
+        } else if (root.statusKind !== "error") {
+          // Progress text is still set; don't require statusText === "".
+          root.statusText = "Failed"
+          root.statusKind = "error"
+        }
         statusClearTimer.restart()
       })
       root.refreshAll()

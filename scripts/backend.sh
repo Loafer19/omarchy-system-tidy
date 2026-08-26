@@ -5,7 +5,8 @@ BASE_LIST="/usr/share/omarchy/install/omarchy-base.packages"
 OTHER_LIST="/usr/share/omarchy/install/omarchy-other.packages"
 
 defaults_set() {
-  grep -hvE '^\s*#|^\s*$' "$BASE_LIST" "$OTHER_LIST" 2>/dev/null | sort -u
+  # Missing lists (non-Omarchy host) must not abort packages-list under pipefail.
+  grep -hvE '^\s*#|^\s*$' "$BASE_LIST" "$OTHER_LIST" 2>/dev/null | sort -u || true
 }
 
 package_last_used() {
@@ -15,7 +16,7 @@ package_last_used() {
     [ -f "$f" ] || continue
     atime=$(stat -c %X "$f" 2>/dev/null || echo 0)
     [ "$atime" -gt "$newest" ] && newest=$atime
-  done < <(pacman -Ql "$pkg" 2>/dev/null | awk '{print $2}' | grep -E '/s?bin/')
+  done < <(pacman -Ql "$pkg" 2>/dev/null | awk '{print $2}' | grep -E '/s?bin/' || true)
 
   [ "$newest" -eq 0 ] && { echo "n/a"; return; }
 
@@ -28,7 +29,7 @@ describe_packages() {
     [ -z "$pkg" ] && continue
     local size date used
     size=$(expac -H M '%m' "$pkg" 2>/dev/null || echo "0")
-    date=$(grep -a "installed $pkg " /var/log/pacman.log 2>/dev/null | tail -1 | cut -d']' -f1 | tr -d '[' | cut -dT -f1)
+    date=$(grep -a "installed $pkg " /var/log/pacman.log 2>/dev/null | tail -1 | cut -d']' -f1 | tr -d '[' | cut -dT -f1 || true)
     used=$(package_last_used "$pkg")
     printf '%s\t%s\t%s\t%s\n' "$pkg" "${size:-0}" "${date:-unknown}" "$used"
   done
@@ -38,7 +39,7 @@ describe_packages() {
 packages_list() {
   local defaults installed
   defaults=$(defaults_set)
-  installed=$(pacman -Qeq | sort -u)
+  installed=$(pacman -Qeq 2>/dev/null | sort -u || true)
   comm -23 <(echo "$installed") <(echo "$defaults") | describe_packages
 }
 
@@ -67,13 +68,19 @@ packages_pacnew() {
 
 packages_pacnew_remove() {
   [ "$#" -eq 0 ] && exit 0
-  # Defense in depth: a privileged delete shouldn't trust its argument
-  # just because the only real caller is our own listing.
-  case "$1" in
-    /etc/*.pacnew | /etc/*.pacsave | /etc/*.pacorig) ;;
+  # Resolve first so .. / symlink tricks can't escape /etc, then require a
+  # pacman leftover suffix (nested paths like /etc/pacman.d/*.pacnew OK).
+  local resolved
+  resolved=$(realpath -e -- "$1" 2>/dev/null) || exit 1
+  case "$resolved" in
+    /etc/*) ;;
     *) exit 1 ;;
   esac
-  pkexec rm -f "$1"
+  case "$resolved" in
+    *.pacnew | *.pacsave | *.pacorig) ;;
+    *) exit 1 ;;
+  esac
+  pkexec rm -f -- "$resolved"
 }
 
 webapps_list() {
@@ -175,12 +182,26 @@ dir_size_mb() {
 }
 
 # Refuses a symlinked path — a plain `rm -rf "$d"/*` would otherwise
-# follow it and delete whatever it actually points to.
+# follow it and delete whatever it actually points to. Uses find so
+# dotfiles are cleared too (shell globs skip them).
 safe_clear_dir() {
   local d="$1"
   [ -L "$d" ] && return 0
   [ -d "$d" ] || return 0
-  rm -rf "${d:?}"/*
+  find "$d" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + 2>/dev/null || true
+  return 0
+}
+
+# Same rules as safe_clear_dir, run as root via pkexec (glob/find expand
+# inside the elevated shell — never in the user shell before pkexec).
+pkexec_safe_clear_dir() {
+  local d="$1"
+  pkexec bash -c '
+    d=$1
+    [ -L "$d" ] && exit 0
+    [ -d "$d" ] || exit 0
+    find "$d" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+  ' _ "$d"
 }
 
 docker_size_mb() {
@@ -226,7 +247,9 @@ dev_cache_mb() {
 }
 
 journal_size_mb() {
-  journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMG]' | head -1 | awk '
+  # grep exits 1 on no match; under pipefail that would abort cleanup-status.
+  local out
+  out=$(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMG]' | head -1 | awk '
     {
       unit = substr($0, length($0), 1)
       num = substr($0, 1, length($0) - 1)
@@ -235,7 +258,8 @@ journal_size_mb() {
       else if (unit == "K") print num / 1024
       else print 0
     }
-  '
+  ' || true)
+  echo "${out:-0}"
 }
 
 orphans_count() {
@@ -246,7 +270,8 @@ orphans_size_mb() {
   local pkgs
   pkgs=$(pacman -Qtdq 2>/dev/null || true)
   [ -z "$pkgs" ] && { echo 0; return; }
-  expac -H M '%m' $pkgs 2>/dev/null | awk '{t += $1} END { printf "%.0f", t + 0 }'
+  # shellcheck disable=SC2086 # intentional word-split of package list
+  expac -H M '%m' $pkgs 2>/dev/null | awk '{t += $1} END { printf "%.0f", t + 0 }' || echo 0
 }
 
 # Coding agents Omarchy ships via mise — same set as omarchy-default-agent.
@@ -441,7 +466,7 @@ dev_cache_clean() {
 cleanup_run() {
   case "$1" in
     pacman) pkexec paccache -r -u -k0 ;;
-    coredump) pkexec rm -rf /var/lib/systemd/coredump/* ;;
+    coredump) pkexec_safe_clear_dir /var/lib/systemd/coredump ;;
     trash)
       safe_clear_dir "$HOME/.local/share/Trash/files"
       safe_clear_dir "$HOME/.local/share/Trash/info"
