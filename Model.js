@@ -20,7 +20,7 @@ function parsePackages(text) {
   return rows
 }
 
-function parseWebapps(text) {
+function parseNameList(text) {
   return String(text || "").split("\n").filter(function(l) { return l.trim() !== "" }).map(function(name) {
     return { name: name }
   })
@@ -40,9 +40,15 @@ function parsePacnewFiles(text) {
   return rows
 }
 
+function parseAgents(text) {
+  var rows = parseTsvRows(text, ["id", "name", "sizeMb", "detail"])
+  rows.sort(function(a, b) { return parseFloat(b.sizeMb) - parseFloat(a.sizeMb) })
+  return rows
+}
+
 function parseCleanupStatus(text) {
   var rows = parseTsvRows(text, ["key", "mb"])
-  var result = { pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, journal: 0, orphans_count: 0, orphans_mb: 0 }
+  var result = { pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, agents: 0, journal: 0, orphans_count: 0, orphans_mb: 0 }
   for (var i = 0; i < rows.length; i++) {
     if (result.hasOwnProperty(rows[i].key)) result[rows[i].key] = parseFloat(rows[i].mb) || 0
   }

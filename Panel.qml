@@ -20,13 +20,16 @@ Panel {
   property string activeTab: "packages"
   property string packagesFilter: "extra"
   property string startupFilter: "autostart"
+  property string launchersFilter: "webapps"
   property var packages: []
   property bool packagesLoading: false
   property var pacnewFiles: []
+  property var agents: []
   property var webapps: []
+  property var tuis: []
   property var autostartItems: []
   property var systemdUnits: []
-  property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, journal: 0, orphans_count: 0, orphans_mb: 0 })
+  property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, agents: 0, journal: 0, orphans_count: 0, orphans_mb: 0 })
   property bool busy: false
   property string statusText: ""
   property string statusKind: "progress" // "progress" | "done" | "error"
@@ -49,7 +52,7 @@ Panel {
     { key: "packages", label: "Packages" },
     { key: "cleanup", label: "Cleanup" },
     { key: "startup", label: "Startup" },
-    { key: "webapps", label: "Webapps" }
+    { key: "launchers", label: "Launchers" }
   ]
 
   readonly property var startupItems: {
@@ -63,14 +66,28 @@ Panel {
     })
   }
 
+  readonly property var launchersItems: {
+    if (root.launchersFilter === "tuis") {
+      return root.tuis.map(function(t) {
+        return { name: t.name, kind: "tui" }
+      })
+    }
+    return root.webapps.map(function(w) {
+      return { name: w.name, kind: "webapp" }
+    })
+  }
+
   function refreshAll() {
     if (root.packagesFilter === "pacnew") {
       pacnewProc.running = true
+    } else if (root.packagesFilter === "agents") {
+      agentsProc.running = true
     } else {
       root.packagesLoading = true
       packagesProc.running = true
     }
     webappsProc.running = true
+    tuisProc.running = true
     autostartProc.running = true
     systemdProc.running = true
     cleanupProc.running = true
@@ -92,6 +109,8 @@ Panel {
     root.packagesFilter = key
     if (key === "pacnew") {
       pacnewProc.running = true
+    } else if (key === "agents") {
+      agentsProc.running = true
     } else {
       root.packagesLoading = true
       packagesProc.running = true
@@ -102,9 +121,19 @@ Panel {
     root.startupFilter = key
   }
 
+  function setLaunchersFilter(key) {
+    root.launchersFilter = key
+  }
+
   function removePackage(name) { runAction(["packages-remove", name], "Snapshotting + removing " + name + "…") }
   function removePacnewFile(path, name) { runAction(["packages-pacnew-remove", path], "Removing " + name + "…") }
+  function removeAgent(id, name) { runAction(["agents-remove", id], "Removing " + name + "…") }
   function removeWebapp(name) { runAction(["webapps-remove", name], "Removing " + name + "…") }
+  function removeTui(name) { runAction(["tui-remove", name], "Removing " + name + "…") }
+  function removeLauncherItem(item) {
+    if (item.kind === "tui") root.removeTui(item.name)
+    else root.removeWebapp(item.name)
+  }
   function disableAutostart(name) { runAction(["autostart-disable", name], "Disabling " + name + "…") }
   function disableSystemdUnit(name) { runAction(["systemd-disable", name], "Disabling " + name + "…") }
   function disableStartupItem(item) {
@@ -222,7 +251,8 @@ Panel {
             model: [
               { key: "extra", label: "Extra" },
               { key: "orphans", label: "Orphans" },
-              { key: "pacnew", label: "Pacnew" }
+              { key: "pacnew", label: "Pacnew" },
+              { key: "agents", label: "Agents" }
             ]
 
             Rectangle {
@@ -266,10 +296,13 @@ Panel {
           visible: root.activeTab === "packages"
           clip: true
           spacing: root.rowGap
-          model: root.packagesFilter === "pacnew" ? root.pacnewFiles : root.packages
+          model: root.packagesFilter === "pacnew" ? root.pacnewFiles
+            : root.packagesFilter === "agents" ? root.agents
+            : root.packages
           delegate: Rectangle {
             required property var modelData
             readonly property bool isPacnew: root.packagesFilter === "pacnew"
+            readonly property bool isAgent: root.packagesFilter === "agents"
             width: ListView.view.width
             height: root.rowHeight
             color: "transparent"
@@ -297,6 +330,8 @@ Panel {
                 elide: Text.ElideRight
                 text: isPacnew
                   ? Model.formatBytes(modelData.bytes) + " · " + modelData.path
+                  : isAgent
+                  ? Model.formatMib(modelData.sizeMb) + " · " + modelData.detail
                   : Model.formatMib(modelData.sizeMb) + " · installed " + modelData.date + " · used " + modelData.lastUsed
                 color: Qt.darker(root.contentForeground, 1.5)
                 font.family: root.contentFontFamily
@@ -329,9 +364,11 @@ Panel {
                 enabled: !root.busy
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: isPacnew
-                  ? root.removePacnewFile(modelData.path, modelData.name)
-                  : root.removePackage(modelData.name)
+                onClicked: {
+                  if (isPacnew) root.removePacnewFile(modelData.path, modelData.name)
+                  else if (isAgent) root.removeAgent(modelData.id, modelData.name)
+                  else root.removePackage(modelData.name)
+                }
               }
             }
           }
@@ -339,7 +376,8 @@ Panel {
 
         Text {
           anchors.centerIn: parent
-          visible: root.activeTab === "packages" && root.packagesFilter !== "pacnew"
+          visible: root.activeTab === "packages"
+            && root.packagesFilter !== "pacnew" && root.packagesFilter !== "agents"
             && root.packagesLoading && root.packages.length === 0
           text: "Loading…"
           color: Qt.darker(root.contentForeground, 1.5)
@@ -349,24 +387,79 @@ Panel {
 
         Text {
           anchors.centerIn: parent
-          visible: root.activeTab === "packages" && !root.packagesLoading
-            && (root.packagesFilter === "pacnew" ? root.pacnewFiles.length === 0 : root.packages.length === 0)
+          visible: root.activeTab === "packages" && (
+            root.packagesFilter === "pacnew" ? root.pacnewFiles.length === 0
+              : root.packagesFilter === "agents" ? root.agents.length === 0
+              : (!root.packagesLoading && root.packages.length === 0)
+          )
           text: root.packagesFilter === "orphans"
             ? "No orphaned packages"
             : root.packagesFilter === "pacnew"
             ? "No .pacnew/.pacsave files found"
+            : root.packagesFilter === "agents"
+            ? "No coding agents installed"
             : "No packages beyond the Omarchy defaults"
           color: Qt.darker(root.contentForeground, 1.5)
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
         }
 
+        Row {
+          id: launchersFilterRow
+          visible: root.activeTab === "launchers"
+          anchors.top: parent.top
+          anchors.left: parent.left
+          height: Style.space(24)
+          spacing: root.edgeMargin
+
+          Repeater {
+            model: [
+              { key: "webapps", label: "Webapps" },
+              { key: "tuis", label: "TUIs" }
+            ]
+
+            Rectangle {
+              required property var modelData
+              readonly property bool selected: root.launchersFilter === modelData.key
+              width: launchersFilterLabel.implicitWidth + Style.space(16)
+              height: Style.space(24)
+              radius: Style.cornerRadius
+              color: selected
+                ? root.selectedRowFill
+                : (launchersFilterMouse.containsMouse ? root.hoverRowFill : "transparent")
+              border.width: selected ? 0 : Style.spacing.hairline
+              border.color: root.dividerColor
+
+              Text {
+                id: launchersFilterLabel
+                anchors.centerIn: parent
+                text: modelData.label
+                color: selected ? root.contentForeground : Qt.darker(root.contentForeground, 1.5)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              MouseArea {
+                id: launchersFilterMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.setLaunchersFilter(modelData.key)
+              }
+            }
+          }
+        }
+
         ListView {
-          anchors.fill: parent
-          visible: root.activeTab === "webapps"
+          anchors.top: launchersFilterRow.bottom
+          anchors.topMargin: root.edgeMargin
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.bottom: parent.bottom
+          visible: root.activeTab === "launchers"
           clip: true
           spacing: root.rowGap
-          model: root.webapps
+          model: root.launchersItems
           delegate: Rectangle {
             required property var modelData
             width: ListView.view.width
@@ -376,7 +469,7 @@ Panel {
             Text {
               anchors.left: parent.left
               anchors.leftMargin: root.edgeMargin
-              anchors.right: removeWebappBtn.left
+              anchors.right: removeLauncherBtn.left
               anchors.rightMargin: root.edgeMargin
               anchors.verticalCenter: parent.verticalCenter
               elide: Text.ElideRight
@@ -388,7 +481,7 @@ Panel {
             }
 
             Rectangle {
-              id: removeWebappBtn
+              id: removeLauncherBtn
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               anchors.rightMargin: root.edgeMargin
@@ -396,7 +489,7 @@ Panel {
               height: Style.space(26)
               radius: Style.cornerRadius
               opacity: root.busy ? 0.45 : 1.0
-              color: removeWebappMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
+              color: removeLauncherMouse.containsMouse ? root.dangerHoverFill : root.normalRowFill
 
               Text {
                 anchors.centerIn: parent
@@ -407,12 +500,12 @@ Panel {
               }
 
               MouseArea {
-                id: removeWebappMouse
+                id: removeLauncherMouse
                 anchors.fill: parent
                 enabled: !root.busy
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: root.removeWebapp(modelData.name)
+                onClicked: root.removeLauncherItem(modelData)
               }
             }
           }
@@ -420,8 +513,10 @@ Panel {
 
         Text {
           anchors.centerIn: parent
-          visible: root.activeTab === "webapps" && root.webapps.length === 0
-          text: "No webapp launchers installed"
+          visible: root.activeTab === "launchers" && root.launchersItems.length === 0
+          text: root.launchersFilter === "tuis"
+            ? "No TUI launchers installed"
+            : "No webapp launchers installed"
           color: Qt.darker(root.contentForeground, 1.5)
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body
@@ -569,6 +664,7 @@ Panel {
             { key: "pacman", label: "Pacman cache", action: "clean", note: "Skips packages you still have installed" },
             { key: "aur", label: "AUR build cache", action: "clean", note: "yay/paru build artifacts, safe to delete" },
             { key: "dev", label: "Dev tool caches", action: "clean", note: "pip, npm, cargo, go — all rebuild on demand" },
+            { key: "agents", label: "Agent caches", action: "clean", note: "Sessions and tmp — keeps login and settings" },
             { key: "docker", label: "Docker (prune)", action: "clean", note: "Leaves images you still use alone" },
             { key: "browser", label: "Browser cache", action: "clean", note: "Just page cache — won't log you out" },
             { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete" },
@@ -683,11 +779,29 @@ Panel {
   }
 
   Process {
+    id: agentsProc
+    command: ["bash", root.backendPath, "agents-list"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.agents = Model.parseAgents(text)
+    }
+  }
+
+  Process {
     id: webappsProc
     command: ["bash", root.backendPath, "webapps-list"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.webapps = Model.parseWebapps(text)
+      onStreamFinished: root.webapps = Model.parseNameList(text)
+    }
+  }
+
+  Process {
+    id: tuisProc
+    command: ["bash", root.backendPath, "tui-list"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.tuis = Model.parseNameList(text)
     }
   }
 
