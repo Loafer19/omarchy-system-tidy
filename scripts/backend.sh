@@ -5,7 +5,6 @@ BASE_LIST="/usr/share/omarchy/install/omarchy-base.packages"
 OTHER_LIST="/usr/share/omarchy/install/omarchy-other.packages"
 
 defaults_set() {
-  # Missing lists (non-Omarchy host) must not abort packages-list under pipefail.
   grep -hvE '^\s*#|^\s*$' "$BASE_LIST" "$OTHER_LIST" 2>/dev/null | sort -u || true
 }
 
@@ -24,8 +23,7 @@ package_last_used() {
   [ "$days" -le 0 ] && echo "today" || echo "${days}d ago"
 }
 
-# Fast path: size + install date only. last-used is expensive (pacman -Ql +
-# atime per file) so the panel fills it in later via packages-last-used.
+# last-used filled later via packages-last-used (pacman -Ql is slow).
 describe_packages() {
   while read -r pkg; do
     [ -z "$pkg" ] && continue
@@ -48,7 +46,6 @@ packages_orphans() {
   (pacman -Qtdq 2>/dev/null || true) | sort -u | describe_packages
 }
 
-# Args: package names. Prints name\tlastUsed per line.
 packages_last_used() {
   local pkg
   for pkg in "$@"; do
@@ -60,9 +57,7 @@ packages_last_used() {
 
 packages_remove() {
   [ "$#" -eq 0 ] && exit 0
-  # Prefer Omarchy's multi-config snapper wrapper (same as updates). Falls
-  # back to a single snapper create when the helper is missing. Snapshot
-  # failure must not block the remove.
+  # omarchy-snapshot (multi-config); snapper fallback. Failure must not block remove.
   pkexec env PATH="/usr/share/omarchy/bin:/usr/bin:/bin:$PATH" \
     OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}" \
     bash -c '
@@ -76,8 +71,7 @@ packages_remove() {
     ' _ "system-tidy: before removing $*" "$@"
 }
 
-# Leftover config files pacman drops on upgrade/removal. Listing needs no
-# privilege; removing does, since /etc is root-owned.
+# Listing is unprivileged; remove needs root (/etc).
 packages_pacnew() {
   (find /etc -xdev \( -name "*.pacnew" -o -name "*.pacsave" -o -name "*.pacorig" \) 2>/dev/null || true) | sort | while read -r f; do
     [ -f "$f" ] || continue
@@ -88,8 +82,7 @@ packages_pacnew() {
 
 packages_pacnew_remove() {
   [ "$#" -eq 0 ] && exit 0
-  # Resolve first so .. / symlink tricks can't escape /etc, then require a
-  # pacman leftover suffix (nested paths like /etc/pacman.d/*.pacnew OK).
+  # realpath + /etc + .pacnew|.pacsave|.pacorig (including nested under /etc).
   local resolved
   resolved=$(realpath -e -- "$1" 2>/dev/null) || exit 1
   case "$resolved" in
@@ -113,7 +106,7 @@ webapps_remove() {
   omarchy webapp remove "$1"
 }
 
-# Same convention omarchy-tui-remove-all uses to find its own TUIs.
+# Same match as omarchy-tui-remove-all.
 tui_list() {
   local f
   for f in "$HOME/.local/share/applications/"*.desktop; do
@@ -125,7 +118,7 @@ tui_list() {
 
 tui_remove() {
   [ "$#" -eq 0 ] && exit 0
-  # Direct binary: `omarchy tui remove all` is a mass-delete, not a name.
+  # Avoid `omarchy tui remove`: "all" is mass-delete.
   omarchy-tui-remove "$1"
 }
 
@@ -153,21 +146,18 @@ autostart_list() {
 autostart_disable() {
   [ "$#" -eq 0 ] && exit 0
   local name="$1"
-  # Strip any .desktop suffix / path bits; reject escapes out of autostart/.
   name=$(basename -- "$name")
   name=${name%.desktop}
   case "$name" in
     "" | .* | *..* | */*) exit 1 ;;
   esac
-  # basename already strips directories; still refuse embedded slashes if any remain.
   [[ "$name" != *$'\n'* && "$name" != *'/'* ]] || exit 1
 
   local dir="$HOME/.config/autostart"
   local target="$dir/$name.desktop"
   mkdir -p "$dir"
 
-  # Write to a temp file and rename it into place — rename(2) replaces
-  # whatever's at $target without following it, so there's no race window.
+  # temp + rename so we never follow a symlink at $target.
   local tmp
   tmp=$(mktemp "$dir/.tidy-tmp.XXXXXX") || exit 1
 
@@ -185,8 +175,7 @@ autostart_disable() {
   mv -f "$tmp" "$target"
 }
 
-# Scoped to units under ~/.config/systemd/user/ only, so vendor-shipped
-# units (audio, keyring, etc.) never show up here to be disabled.
+# Only ~/.config/systemd/user/ — never vendor session units.
 systemd_user_list() {
   command -v systemctl >/dev/null 2>&1 || return 0
   local unit path
@@ -210,9 +199,7 @@ dir_size_mb() {
   du -sm "$1" 2>/dev/null | cut -f1 || true
 }
 
-# Refuses a symlinked path — a plain `rm -rf "$d"/*` would otherwise
-# follow it and delete whatever it actually points to. Uses find so
-# dotfiles are cleared too (shell globs skip them).
+# Refuse symlinked dirs; find clears children including dotfiles.
 safe_clear_dir() {
   local d="$1"
   [ -L "$d" ] && return 0
@@ -221,8 +208,7 @@ safe_clear_dir() {
   return 0
 }
 
-# Same rules as safe_clear_dir, run as root via pkexec (glob/find expand
-# inside the elevated shell — never in the user shell before pkexec).
+# safe_clear_dir as root (expand inside pkexec, not the user shell).
 pkexec_safe_clear_dir() {
   local d="$1"
   pkexec bash -c '
@@ -276,7 +262,6 @@ dev_cache_mb() {
 }
 
 journal_size_mb() {
-  # grep exits 1 on no match; under pipefail that would abort cleanup-status.
   local out
   out=$(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMG]' | head -1 | awk '
     {
@@ -291,20 +276,7 @@ journal_size_mb() {
   echo "${out:-0}"
 }
 
-orphans_count() {
-  (pacman -Qtdq 2>/dev/null || true) | wc -l
-}
-
-orphans_size_mb() {
-  local pkgs
-  pkgs=$(pacman -Qtdq 2>/dev/null || true)
-  [ -z "$pkgs" ] && { echo 0; return; }
-  # shellcheck disable=SC2086 # intentional word-split of package list
-  expac -H M '%m' $pkgs 2>/dev/null | awk '{t += $1} END { printf "%.0f", t + 0 }' || echo 0
-}
-
-# Coding agents Omarchy ships via mise — same set as omarchy-default-agent.
-# Columns: id|display|mise_pkg|stub|install_dirname under ~/.local/share/mise/installs/
+# id|display|mise_pkg|stub|install_dirname — same set as omarchy-default-agent.
 agent_catalog() {
   cat <<'EOF'
 pi|Pi|pi|pi|pi
@@ -320,7 +292,6 @@ crush|Crush|crush|crush|crush
 EOF
 }
 
-# Resolve the on-disk mise install path; dirname conventions vary by backend.
 agent_install_path() {
   local hint="$1" pkg="$2"
   local installs="$HOME/.local/share/mise/installs"
@@ -381,7 +352,6 @@ agents_remove() {
   [ "$matched" -eq 1 ] || exit 1
 
   if command -v mise >/dev/null 2>&1; then
-    # Drop from global mise.toml and prune installs; uninstall covers leftovers.
     mise unuse -g -y "$pkg" >/dev/null 2>&1 || true
     mise uninstall --all -y "$pkg" >/dev/null 2>&1 || true
   fi
@@ -393,8 +363,7 @@ agents_remove() {
   fi
 }
 
-# Session/cache footprints for every Omarchy coding agent. Auth, settings,
-# skills, and configs stay put — same spirit as "Browser cache".
+# Session/cache paths only — leave auth, settings, skills alone.
 agents_cache_paths() {
   local share="${XDG_DATA_HOME:-$HOME/.local/share}"
   local cache="${XDG_CACHE_HOME:-$HOME/.cache}"
@@ -448,7 +417,6 @@ agents_cache_clean() {
     [ -z "$path" ] && continue
     [ -L "$path" ] && continue
     if [ -d "$path" ]; then
-      # opencode share dir holds auth.json — clear contents except auth.
       if [ "$path" = "$opencode_share" ]; then
         find "$path" -mindepth 1 -maxdepth 1 ! -name 'auth.json' -exec rm -rf {} + 2>/dev/null || true
       else
@@ -463,7 +431,7 @@ agents_cache_clean() {
   return 0
 }
 
-# Download cache + installed versions `mise prune` would delete.
+# ~/.cache/mise + versions `mise prune` would delete.
 mise_unused_mb() {
   command -v mise >/dev/null 2>&1 || { echo 0; return; }
   local total=0 size path tool ver
@@ -500,18 +468,13 @@ cleanup_status() {
   printf 'agents\t%s\n' "$(agents_cache_mb)"
   printf 'mise\t%s\n' "$(mise_unused_mb)"
   printf 'journal\t%s\n' "$(journal_size_mb)"
-  printf 'orphans_count\t%s\n' "$(orphans_count)"
-  printf 'orphans_mb\t%s\n' "$(orphans_size_mb)"
 }
 
 dev_cache_clean() {
-  # Clear directly rather than each tool's own "clean" command — those
-  # no-op silently when the tool isn't on this process's PATH.
   safe_clear_dir "$HOME/.cache/pip"
   safe_clear_dir "$HOME/.npm"
   safe_clear_dir "$HOME/.cargo/registry"
-  # Go marks module cache entries read-only; strip that first or rm stops
-  # partway through.
+  # Go module cache is often read-only.
   if [ -d "$HOME/go/pkg/mod" ] && [ ! -L "$HOME/go/pkg/mod" ]; then
     chmod -R u+w "$HOME/go/pkg/mod" 2>/dev/null || true
   fi

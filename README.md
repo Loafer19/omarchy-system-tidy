@@ -1,31 +1,25 @@
-# System Tidy — system cleanup for Omarchy
+# System Tidy — cleanup for Omarchy
 
-A bar widget for [Omarchy](https://github.com/basecamp/omarchy) that audits
-clutter and cleans it from one panel.
+Bar widget that audits clutter and cleans it from one panel.
 
 ![Cleanup tab](preview.png)
 
-Click the broom:
+- **Packages** — **Extra** (beyond Omarchy defaults), **Orphans**, **Pacnew**,
+  **Agent CLIs** (mise: Claude Code, Codex, Grok, …). Package remove is
+  `pacman -Rns` after `omarchy snapshot create`. Agent remove drops the tool;
+  history stays until Cleanup → Agent caches.
+- **Cleanup** — pacman/AUR/dev caches, agent history & tmp, Mise unused
+  (`mise prune` + download cache), Docker prune (no `-a`), Chrome/Chromium
+  cache, coredumps, journal, trash. Clean disabled at 0 MiB.
+- **Startup** — Autostart `.desktop` + Services (`~/.config/systemd/user/` only).
+- **Launchers** — Web Apps and TUIs from `omarchy webapp|tui install`.
 
-- **Packages** — **Added** (beyond Omarchy defaults), **Orphans**, **Pacnew**
-  (`.pacnew`/`.pacsave`/`.pacorig`), and **Agent CLIs** (mise tools like Claude
-  Code, Codex, Grok). Package remove uses `pacman -Rns` after
-  `omarchy snapshot create`. Agent remove drops the tool; session history
-  stays until Cleanup → Agent caches.
-- **Cleanup** — pacman/AUR/dev caches, agent chat history & tmp (login stays),
-  Mise unused (`mise prune` + download cache), Docker prune (no `-a`),
-  Chrome/Chromium cache, coredumps, journal, trash. Clean is disabled at 0 MiB.
-- **Startup** — **Autostart** `.desktop` entries and **Services** (only units
-  under `~/.config/systemd/user/`).
-- **Launchers** — **Web Apps** and **TUIs** from `omarchy webapp|tui install`.
-
-Keyboard: **Tab** cycles tabs; **h/l** chips; **j/k** rows; **Enter** acts.
-Status shows Done/Failed briefly after each action.
+**Tab** cycles tabs · **h/l** chips · **j/k** rows · **Enter** acts.
 
 ## Requirements
 
-Stock Omarchy + `pacman-contrib`. Package remove, pacnew, paccache, coredump,
-and journal ask for a password (`pkexec`).
+Omarchy + `pacman-contrib`. Package remove, pacnew, paccache, coredump, and
+journal use `pkexec`.
 
 ## Install
 

@@ -4,8 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Same bar-widget/panel split as the built-in clock widget: this root
-// owns the bar label, Panel.qml owns the floating content.
+// Bar chrome here; Panel.qml owns the floating content (same split as clock).
 BarWidget {
   id: root
   moduleName: "yoyo.system-tidy"
@@ -62,8 +61,6 @@ BarWidget {
     function toggle(): void { root.toggle() }
   }
 
-  // Nerd Font "md-broom" glyph via BarIconButton, same as every other
-  // first-party bar icon — matches their weight/brightness exactly.
   BarIconButton {
     id: button
     anchors.fill: parent

@@ -4,6 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
+import "components" as Tidy
 
 Panel {
   id: root
@@ -35,7 +36,7 @@ Panel {
   property bool autostartLoading: false
   property var systemdUnits: []
   property bool systemdLoading: false
-  property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, agents: 0, mise: 0, journal: 0, orphans_count: 0, orphans_mb: 0 })
+  property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, agents: 0, mise: 0, journal: 0 })
   property bool busy: false
   property string statusText: ""
   property string statusKind: "progress" // "progress" | "done" | "error"
@@ -53,7 +54,7 @@ Panel {
   readonly property bool launchersViewLoading: root.launchersFilter === "tuis" ? root.tuisLoading : root.webappsLoading
   readonly property bool startupViewLoading: root.startupFilter === "services" ? root.systemdLoading : root.autostartLoading
 
-  // Cleanable rows largest-first. Orphans live under Packages → Orphans only.
+  // Largest reclaimable first.
   readonly property var cleanupRows: {
     var rows = [
       { key: "pacman", label: "Pacman cache", action: "clean", note: "Only cached packages you've already removed" },
@@ -78,7 +79,6 @@ Panel {
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color dividerColor: Qt.rgba(contentForeground.r, contentForeground.g, contentForeground.b, 0.12)
 
-  // Single spacing value instead of scattered ad-hoc numbers.
   readonly property int edgeMargin: Style.space(6)
   readonly property int rowGap: 0
   readonly property int rowHeight: Style.space(44)
@@ -91,7 +91,7 @@ Panel {
   ]
 
   readonly property var packagesChips: [
-    { key: "extra", label: "Added" },
+    { key: "extra", label: "Extra" },
     { key: "orphans", label: "Orphans" },
     { key: "pacnew", label: "Pacnew" },
     { key: "agents", label: "Agent CLIs" }
@@ -129,8 +129,7 @@ Panel {
     })
   }
 
-  // Keyboard / mouse cursor — one highlight via CursorSurface / ChipRow.
-  // Sections: "tabs" | "filters" | "rows"
+  // Cursor sections: "tabs" | "filters" | "rows"
   property bool cursorActive: false
   property string focusSection: "rows"
   property int selectedIndex: 0
@@ -227,7 +226,6 @@ Panel {
         }
         return
       }
-      // rows
       if (dy > 0) {
         root.selectedIndex = root.clampIndex(root.selectedIndex + 1, root.activeListItems.length)
       } else if (root.selectedIndex > 0) {
@@ -327,9 +325,10 @@ Panel {
       root.focusSection = root.activeListItems.length > 0 ? "rows" : "tabs"
     if (root.focusSection === "rows")
       root.selectedIndex = root.clampIndex(0, root.activeListItems.length)
+    if (root.opened) root.refreshActiveTab()
   }
 
-  function refreshAll() {
+  function refreshPackages() {
     if (root.packagesFilter === "pacnew") {
       root.pacnewLoading = true
       pacnewProc.running = true
@@ -340,15 +339,31 @@ Panel {
       root.packagesLoading = true
       packagesProc.running = true
     }
+  }
+
+  function refreshLaunchers() {
     root.webappsLoading = true
     root.tuisLoading = true
-    root.autostartLoading = true
-    root.systemdLoading = true
     webappsProc.running = true
     tuisProc.running = true
+  }
+
+  function refreshStartup() {
+    root.autostartLoading = true
+    root.systemdLoading = true
     autostartProc.running = true
     systemdProc.running = true
+  }
+
+  function refreshCleanup() {
     cleanupProc.running = true
+  }
+
+  function refreshActiveTab() {
+    if (root.activeTab === "packages") root.refreshPackages()
+    else if (root.activeTab === "launchers") root.refreshLaunchers()
+    else if (root.activeTab === "startup") root.refreshStartup()
+    else if (root.activeTab === "cleanup") root.refreshCleanup()
   }
 
   onOpenedChanged: {
@@ -356,7 +371,7 @@ Panel {
       root.cursorActive = false
       root.focusSection = "rows"
       root.selectedIndex = 0
-      refreshAll()
+      root.refreshActiveTab()
     }
   }
 
@@ -455,7 +470,6 @@ Panel {
       id: keyCatcher
       anchors.fill: parent
       onCloseRequested: root.close()
-      // Tab cycles our own tabs — not other bar plugins.
       onTabRequested: function(direction) { root.cycleTab(direction) }
       onMoveRequested: function(dx, dy) { root.moveCursor(dx, dy) }
       onActivateRequested: root.activateCursor()
@@ -467,7 +481,7 @@ Panel {
         anchors.right: parent.right
         spacing: Style.space(8)
 
-        ChipRow {
+        Tidy.ChipRow {
           chips: root.tabs
           selectedKey: root.activeTab
           foreground: root.contentForeground
@@ -499,7 +513,6 @@ Panel {
 
           Behavior on opacity { NumberAnimation { duration: 150 } }
 
-          // Keeps the last message visible while it fades out.
           Connections {
             target: root
             function onStatusTextChanged() {
@@ -517,7 +530,7 @@ Panel {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 
-        ChipRow {
+        Tidy.ChipRow {
           id: packagesFilterRow
           visible: root.activeTab === "packages"
           anchors.top: parent.top
@@ -549,7 +562,7 @@ Panel {
           model: root.packagesFilter === "pacnew" ? root.pacnewFiles
             : root.packagesFilter === "agents" ? root.agents
             : root.packages
-          delegate: ActionListRow {
+          delegate: Tidy.ActionListRow {
             required property var modelData
             required property int index
             readonly property bool isPacnew: root.packagesFilter === "pacnew"
@@ -606,7 +619,7 @@ Panel {
           font.pixelSize: Style.font.body
         }
 
-        ChipRow {
+        Tidy.ChipRow {
           id: launchersFilterRow
           visible: root.activeTab === "launchers"
           anchors.top: parent.top
@@ -636,7 +649,7 @@ Panel {
           clip: true
           spacing: root.rowGap
           model: root.launchersItems
-          delegate: ActionListRow {
+          delegate: Tidy.ActionListRow {
             required property var modelData
             required property int index
             width: ListView.view.width
@@ -677,7 +690,7 @@ Panel {
           font.pixelSize: Style.font.body
         }
 
-        ChipRow {
+        Tidy.ChipRow {
           id: startupFilterRow
           visible: root.activeTab === "startup"
           anchors.top: parent.top
@@ -707,7 +720,7 @@ Panel {
           clip: true
           spacing: root.rowGap
           model: root.startupItems
-          delegate: ActionListRow {
+          delegate: Tidy.ActionListRow {
             required property var modelData
             required property int index
             width: ListView.view.width
@@ -758,7 +771,7 @@ Panel {
           spacing: root.rowGap
           model: root.cleanupRows
 
-          delegate: ActionListRow {
+          delegate: Tidy.ActionListRow {
             required property var modelData
             required property int index
             width: ListView.view.width
@@ -906,13 +919,12 @@ Panel {
           root.statusText = "Done"
           root.statusKind = "done"
         } else if (root.statusKind !== "error") {
-          // Progress text is still set; don't require statusText === "".
           root.statusText = "Failed"
           root.statusKind = "error"
         }
         statusClearTimer.restart()
       })
-      root.refreshAll()
+      root.refreshActiveTab()
     }
   }
 

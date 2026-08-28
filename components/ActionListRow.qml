@@ -2,8 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 
-// Title + optional subtitle with a right-edge text action (Remove/Clean/…).
-// Row chrome comes from CursorSurface (hasCursor), never from containsMouse.
+// Title + subtitle with a right-edge action; row highlight via hasCursor.
 CursorSurface {
   id: root
 
@@ -12,7 +11,6 @@ CursorSurface {
   property string actionLabel: ""
   property bool actionVisible: true
   property bool actionEnabled: true
-  // Urgent tint for Remove/Clean; normal hover for View/Disable.
   property bool danger: true
   property color contentForeground: Color.foreground
   property string contentFontFamily: Style.font.family
@@ -25,7 +23,6 @@ CursorSurface {
   height: rowHeight
   foreground: contentForeground
   fill: Style.hoverFillFor(contentForeground, Color.accent, Color.urgent)
-  // Outline-free cursor so we don't double up with the light chip language.
   bordered: false
 
   readonly property color actionNormalFill: Style.normalFillFor(contentForeground, Color.accent, Color.urgent)
@@ -33,7 +30,6 @@ CursorSurface {
     ? Util.alpha(Color.urgent, Style.hoverFillAlpha)
     : Style.hoverFillFor(contentForeground, Color.accent, Color.urgent)
 
-  // Hover only — clicks stay on the action button (and keyboard Enter).
   MouseArea {
     anchors.fill: parent
     hoverEnabled: true

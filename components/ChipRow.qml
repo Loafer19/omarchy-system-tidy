@@ -1,9 +1,7 @@
 import QtQuick
 import qs.Commons
 
-// Lightweight selection chips: fill-only selected/cursor (no hover-border).
-// Cursor highlight comes from cursorIndex (panel j/k/h/l + mouse), not raw
-// containsMouse alone — same single-highlight contract as CursorSurface rows.
+// Fill-only chips; cursor via cursorIndex (not containsMouse).
 Row {
   id: root
 
@@ -12,7 +10,6 @@ Row {
   property bool compact: false
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  // -1 = no keyboard/mouse cursor on this row
   property int cursorIndex: -1
   property bool cursorActive: false
 
@@ -37,7 +34,6 @@ Row {
       width: label.implicitWidth + (root.compact ? Style.space(16) : Style.space(20))
       height: root.compact ? Style.space(24) : Style.space(28)
       radius: Style.cornerRadius
-      // Cursor wins over selected fill while navigating, matching CursorSurface.
       color: hasCursor ? root.hoverFill
         : (isSelected ? root.selectedFill : "transparent")
       border.width: isSelected || hasCursor ? 0 : Style.spacing.hairline
