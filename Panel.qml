@@ -1,3 +1,4 @@
+import qs.Commons as Commons
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -75,7 +76,7 @@ Panel {
     return rows
   }
 
-  readonly property color contentForeground: bar ? bar.foreground : Color.foreground
+  readonly property color contentForeground: bar ? bar.foreground : Commons.Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color dividerColor: Qt.rgba(contentForeground.r, contentForeground.g, contentForeground.b, 0.12)
 
@@ -503,8 +504,8 @@ Panel {
           leftPadding: root.edgeMargin
           width: parent.width - root.edgeMargin
           elide: Text.ElideRight
-          color: root.statusKind === "error" ? Color.urgent
-            : root.statusKind === "done" ? Color.accent
+          color: root.statusKind === "error" ? Commons.Color.urgent
+            : root.statusKind === "done" ? Commons.Color.accent
             : root.contentForeground
           font.family: root.contentFontFamily
           font.pixelSize: Style.font.body

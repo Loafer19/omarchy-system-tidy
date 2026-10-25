@@ -1,3 +1,4 @@
+import qs.Commons as Commons
 import QtQuick
 import qs.Commons
 
@@ -8,7 +9,7 @@ Row {
   property var chips: []
   property string selectedKey: ""
   property bool compact: false
-  property color foreground: Color.foreground
+  property color foreground: Commons.Color.foreground
   property string fontFamily: Style.font.family
   property int cursorIndex: -1
   property bool cursorActive: false
@@ -18,8 +19,8 @@ Row {
 
   spacing: compact ? Style.space(6) : Style.space(4)
 
-  readonly property color selectedFill: Style.selectedFillFor(foreground, Color.accent, Color.urgent)
-  readonly property color hoverFill: Style.hoverFillFor(foreground, Color.accent, Color.urgent)
+  readonly property color selectedFill: Style.selectedFillFor(foreground, Commons.Color.accent, Commons.Color.urgent)
+  readonly property color hoverFill: Style.hoverFillFor(foreground, Commons.Color.accent, Commons.Color.urgent)
   readonly property color idleBorder: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.12)
 
   Repeater {

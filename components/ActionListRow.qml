@@ -1,3 +1,4 @@
+import qs.Commons as Commons
 import QtQuick
 import qs.Commons
 import qs.Ui
@@ -12,7 +13,7 @@ CursorSurface {
   property bool actionVisible: true
   property bool actionEnabled: true
   property bool danger: true
-  property color contentForeground: Color.foreground
+  property color contentForeground: Commons.Color.foreground
   property string contentFontFamily: Style.font.family
   property int edgeMargin: Style.space(6)
   property int rowHeight: Style.space(44)
@@ -22,13 +23,13 @@ CursorSurface {
 
   height: rowHeight
   foreground: contentForeground
-  fill: Style.hoverFillFor(contentForeground, Color.accent, Color.urgent)
+  fill: Style.hoverFillFor(contentForeground, Commons.Color.accent, Commons.Color.urgent)
   bordered: false
 
-  readonly property color actionNormalFill: Style.normalFillFor(contentForeground, Color.accent, Color.urgent)
+  readonly property color actionNormalFill: Style.normalFillFor(contentForeground, Commons.Color.accent, Commons.Color.urgent)
   readonly property color actionHoverFill: danger
-    ? Util.alpha(Color.urgent, Style.hoverFillAlpha)
-    : Style.hoverFillFor(contentForeground, Color.accent, Color.urgent)
+    ? Util.alpha(Commons.Color.urgent, Style.hoverFillAlpha)
+    : Style.hoverFillFor(contentForeground, Commons.Color.accent, Commons.Color.urgent)
 
   MouseArea {
     anchors.fill: parent
