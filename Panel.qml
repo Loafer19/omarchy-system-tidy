@@ -72,11 +72,11 @@ Panel {
       { key: "aur", label: "AUR build cache", action: "clean", note: "yay/paru build artifacts, safe to delete", warn: "Deletes ~/.cache/yay and ~/.cache/paru" },
       { key: "dev", label: "Dev tool caches", action: "clean", note: "pip, npm, cargo, go — all rebuild on demand", warn: "Deletes pip/npm/cargo/go download caches" },
       { key: "agents", label: "Agent caches", action: "clean", note: "Temp, logs & caches — keeps sessions, memories, login", warn: "Permanently deletes agent temp/log/cache dirs", irreversible: true },
-      { key: "mise", label: "Mise unused", action: "clean", note: "mise prune + download cache", warn: "Runs mise prune and clears its download cache" },
+      { key: "mise", label: "Mise unused", action: "clean", note: "mise prune + download cache", warn: "Removes tool versions no mise config uses (reinstall to get back)" },
       { key: "docker", label: "Docker (prune)", action: "clean", note: "Stopped containers, dangling images, build cache", warn: "Runs docker system prune (volumes and tagged images are kept)" },
-      { key: "browser", label: "Browser cache", action: "clean", note: "Chrome/Chromium page cache — won't log you out", warn: "Deletes browser page caches" },
+      { key: "browser", label: "Browser cache", action: "clean", note: "Chrome, Chromium, Brave, Vivaldi, Firefox page cache — keeps logins", warn: "Deletes page caches (running browsers are skipped)" },
       { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete", warn: "Deletes all crash dumps (needs password)" },
-      { key: "journal", label: "Journal logs", action: "clean", note: "Keeps the latest 100 MiB", warn: "Vacuums the journal to 100 MiB (needs password)" },
+      { key: "journal", label: "Journal logs", action: "clean", note: "Above the latest 100 MiB", warn: "Vacuums the journal to 100 MiB (needs password)" },
       { key: "trash", label: "Trash", action: "clean", note: "Empties the Trash folder", warn: "Permanently empties the Trash", irreversible: true }
     ]
     return rows
@@ -649,7 +649,7 @@ Panel {
             hasCursor: root.rowHasCursor("packages", index)
             title: modelData.name
             subtitle: {
-              if (isPacnew) return Model.formatBytes(modelData.bytes) + " · " + modelData.path
+              if (isPacnew) return Model.formatBytes(modelData.bytes) + " · " + modelData.path + " · review with pacdiff"
               if (isAgent) return Model.formatMib(modelData.sizeMb) + " · " + modelData.detail
               var line = (modelData.protected ? "needed by the system · " : "") + Model.formatMib(modelData.sizeMb) + " · installed " + modelData.date
               if (modelData.lastUsed && modelData.lastUsed !== "")
@@ -663,7 +663,7 @@ Panel {
             badge: isProtected ? "protected" : ""
             danger: true
             armed: root.armedKey !== "" && root.armedKey === root.rowKey("packages", modelData)
-            armedText: root.confirmHint(isPacnew ? "Deletes " + modelData.path
+            armedText: root.confirmHint(isPacnew ? "Deletes it — merge first with sudo pacdiff"
               : isAgent ? "Uninstalls " + modelData.name + " (mise + stub)"
               : "pacman -Rns " + modelData.name + " after a snapshot")
             onRowHovered: root.setRowCursor(index)
@@ -771,6 +771,8 @@ Panel {
             subtitle: {
               var size = Model.formatMib(root.cleanupStatus[modelData.key] || 0)
               var note = modelData.note
+              if (modelData.key === "journal" && root.cleanupStatus.journalTotal > 0)
+                note += " · " + Model.formatMib(root.cleanupStatus.journalTotal) + " in total"
               if (modelData.key === "pacman" && root.cleanupStatus.pacmanTotal > 0)
                 note += " · cache is " + Model.formatMib(root.cleanupStatus.pacmanTotal) + " in total"
               if (modelData.key === "agents" && root.cleanupStatus.agentsRunning)

@@ -41,13 +41,27 @@ package_last_used() {
 }
 
 # last-used filled later via packages-last-used (pacman -Ql is slow).
+# One expac call and one pass over pacman.log for the whole list (it used to
+# be one expac + one grep of the whole log per package).
 describe_packages() {
+  local -a pkgs=()
+  local pkg
   while read -r pkg; do
-    [ -z "$pkg" ] && continue
-    local size date
-    size=$(expac -H M '%m' "$pkg" 2>/dev/null || echo "0")
-    date=$(grep -a "installed $pkg " "$PACMAN_LOG" 2>/dev/null | tail -1 | cut -d']' -f1 | tr -d '[' | cut -dT -f1 || true)
-    local prot=""
+    [ -n "$pkg" ] && pkgs+=("$pkg")
+  done
+  [ "${#pkgs[@]}" -eq 0 ] && return 0
+  local sizes dates
+  sizes=$(expac -H M '%n\t%m' "${pkgs[@]}" 2>/dev/null || true)
+  dates=$(printf '%s\n' "${pkgs[@]}" | awk '
+    NR == FNR { want[$0] = 1; next }
+    $3 == "installed" && ($4 in want) { d = $1; gsub(/^\[/, "", d); sub(/T.*/, "", d); last[$4] = d }
+    END { for (p in last) printf "%s\t%s\n", p, last[p] }
+  ' - "$PACMAN_LOG" 2>/dev/null || true)
+  local size date prot
+  for pkg in "${pkgs[@]}"; do
+    size=$(awk -F'\t' -v p="$pkg" '$1 == p { print $2; exit }' <<<"$sizes")
+    date=$(awk -F'\t' -v p="$pkg" '$1 == p { print $2; exit }' <<<"$dates")
+    prot=""
     is_protected_pkg "$pkg" && prot="protected"
     printf '%s\t%s\t%s\t%s\t%s\n' "$pkg" "${size:-0}" "${date:-unknown}" "" "$prot"
   done
@@ -359,13 +373,39 @@ pacman_reclaimable_mb() {
   ' <<<"$out"
 }
 
+# Page caches only (never profiles, cookies or logins).
+browser_cache_dirs() {
+  local cache="${XDG_CACHE_HOME:-$HOME/.cache}" d
+  printf '%s\n' "chrome|$cache/google-chrome" "chromium|$cache/chromium" \
+    "brave|$cache/BraveSoftware" "vivaldi-bin|$cache/vivaldi"
+  for d in "$cache"/mozilla/firefox/*/cache2; do
+    [ -d "$d" ] && printf 'firefox|%s\n' "$d"
+  done
+  return 0
+}
+
 browser_cache_mb() {
-  local total=0 d size
-  for d in "$HOME/.cache/google-chrome" "$HOME/.cache/chromium"; do
+  local total=0 proc d size
+  while IFS='|' read -r proc d; do
     size=$(dir_size_mb "$d")
     total=$((total + ${size:-0}))
-  done
+  done < <(browser_cache_dirs)
   echo "$total"
+}
+
+browser_cache_clean() {
+  local proc d skipped=""
+  while IFS='|' read -r proc d; do
+    [ -d "$d" ] || continue
+    if pgrep -x "$proc" >/dev/null 2>&1; then
+      [[ " $skipped " == *" $proc "* ]] || skipped="$skipped $proc"
+      continue
+    fi
+    safe_clear_dir "$d"
+  done < <(browser_cache_dirs)
+  skipped="${skipped# }"
+  [ -n "$skipped" ] && echo "tidy: skipped running ${skipped// /, }"
+  return 0
 }
 
 aur_cache_mb() {
@@ -606,7 +646,11 @@ cleanup_status() {
   printf 'agents\t%s\n' "$(agents_cache_mb)"
   printf 'agents-running\t%s\n' "$(agents_running_list)"
   printf 'mise\t%s\n' "$(mise_unused_mb)"
-  printf 'journal\t%s\n' "$(journal_size_mb)"
+  # Clean vacuums to 100 MiB, so only what is above that is reclaimable.
+  local journal
+  journal=$(journal_size_mb)
+  printf 'journal\t%s\n' "$(awk -v j="$journal" 'BEGIN { r = j - 100; printf "%.1f\n", (r > 0 ? r : 0) }')"
+  printf 'journal-total\t%s\n' "$journal"
 }
 
 dev_cache_clean() {
@@ -630,10 +674,7 @@ cleanup_run() {
       safe_clear_dir "$HOME/.local/share/Trash/info"
       ;;
     docker) docker system prune -f ;;
-    browser)
-      safe_clear_dir "$HOME/.cache/google-chrome"
-      safe_clear_dir "$HOME/.cache/chromium"
-      ;;
+    browser) browser_cache_clean ;;
     aur)
       safe_clear_dir "$HOME/.cache/yay"
       safe_clear_dir "$HOME/.cache/paru"

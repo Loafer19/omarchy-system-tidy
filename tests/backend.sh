@@ -33,7 +33,7 @@ case "$1" in
   -Ql) exit 0 ;;
   -Qq) cat "$FX/explicit" ;;
 esac'
-stub expac 'shift 2; fmt=$1; shift; for p in "$@"; do grep -P "^$p\t" "$FX/sizes" | cut -f2 || echo "0.00 MiB"; done; [ $# -gt 0 ] || while read -r p; do printf "%s\t%s\n" "$p" "$(grep -P "^$p\t" "$FX/sizes" | cut -f2)"; done'
+stub expac 'shift 2; fmt=$1; shift; for p in "$@"; do s=$(grep -P "^$p\t" "$FX/sizes" | cut -f2); s=${s:-0.00 MiB}; if [ "$fmt" = "%n\t%m" ] || [ "$fmt" = "%n\\t%m" ]; then printf "%s\t%s\n" "$p" "$s"; else echo "$s"; fi; done'
 stub pkexec
 stub paccache 'cat "$FX/paccache" 2>/dev/null'
 stub systemctl 'cat "$FX/systemctl.$1.$2" 2>/dev/null; exit 0'
@@ -68,6 +68,9 @@ echo "== protected packages"
 list=$(B packages-list)
 expect "defaults are not listed" "$(cut -f1 <<<"$list" | tr '\n' ' ')" "amd-ucode cmake linux-wifi-hotspot omarchy-settings steam sudo v4l2loopback-dkms "
 expect "protected column" "$(awk -F'\t' '$5=="protected"{printf "%s ", $1}' <<<"$list")" "amd-ucode omarchy-settings sudo v4l2loopback-dkms "
+expect "sizes from one expac call" "$(awk -F'\t' '$1=="steam"||$1=="cmake"{printf "%s=%s ", $1, $2}' <<<"$list")" "cmake=40.10 MiB steam=512.00 MiB "
+expect "install date: exact name, last install" "$(awk -F'\t' '$1=="steam"{print $3}' <<<"$list")" "2026-01-02"
+expect "unknown date" "$(awk -F'\t' '$1=="cmake"{print $3}' <<<"$list")" "unknown"
 expect "user apps not protected" "$(awk -F'\t' '$5==""{printf "%s ", $1}' <<<"$list")" "cmake linux-wifi-hotspot steam "
 for p in sudo omarchy amd-ucode linux mkinitcpio limine nvidia-dkms base; do
   reset_calls
@@ -186,6 +189,27 @@ reset_calls; B systemd-disable fluxd.service; expect_has "disable --now --" "$(c
 reset_calls; B systemd-enable old.timer; expect_has "enable --now --" "$(calls)" "systemctl --user enable --now -- old.timer"
 reset_calls; B systemd-disable vendor.service >/dev/null 2>&1; expect "vendor unit refused" "$?:$(calls | grep -c disable)" "2:0"
 reset_calls; B systemd-disable --global >/dev/null 2>&1; expect "option-like unit refused" "$?:$(calls)" "2:"
+
+
+echo "== journal / browser"
+printf 'Archived and active journals take up 171.4M in the file system.\n' > "$FX/journal"
+st=$(B cleanup-status)
+expect "journal reclaimable = size - 100 MiB" "$(v journal)" "71.4"
+expect "journal total kept" "$(v journal-total)" "171.4"
+printf 'Archived and active journals take up 80.0M in the file system.\n' > "$FX/journal"
+st=$(B cleanup-status); expect "journal under 100 MiB -> 0" "$(v journal)" "0.0"
+mk "$HOME/.cache/google-chrome/Default/Cache/x"; mk "$HOME/.cache/BraveSoftware/Brave-Browser/Default/Cache/y"
+mk "$HOME/.cache/mozilla/firefox/abc.default/cache2/entries/z"; mk "$HOME/.config/google-chrome/Default/Cookies"
+st=$(B cleanup-status); expect "browser counts chrome+brave+firefox" "$(v browser)" "6"
+echo chrome > "$FX/running"
+out=$(B cleanup-run browser)
+expect "running chrome skipped" "$out" "tidy: skipped running chrome"
+exists "chrome cache kept while running" "$HOME/.cache/google-chrome/Default/Cache/x"
+gone "brave cache cleared" "$HOME/.cache/BraveSoftware/Brave-Browser"
+gone "firefox cache2 cleared" "$HOME/.cache/mozilla/firefox/abc.default/cache2/entries"
+exists "firefox profile dir kept" "$HOME/.cache/mozilla/firefox/abc.default/cache2"
+exists "chrome profile (cookies) never touched" "$HOME/.config/google-chrome/Default/Cookies"
+: > "$FX/running"
 
 printf '\nRESULT  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

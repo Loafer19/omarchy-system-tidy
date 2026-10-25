@@ -76,9 +76,10 @@ function parseAgents(text) {
 
 function parseCleanupStatus(text) {
   var rows = parseTsvRows(text, ["key", "mb"])
-  var result = { pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, agents: 0, mise: 0, journal: 0, agentsRunning: "", pacmanTotal: 0 }
+  var result = { pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, agents: 0, mise: 0, journal: 0, agentsRunning: "", pacmanTotal: 0, journalTotal: 0 }
   for (var i = 0; i < rows.length; i++) {
-    if (rows[i].key === "pacman-total") result.pacmanTotal = parseFloat(rows[i].mb) || 0
+    if (rows[i].key === "journal-total") result.journalTotal = parseFloat(rows[i].mb) || 0
+    else if (rows[i].key === "pacman-total") result.pacmanTotal = parseFloat(rows[i].mb) || 0
     else if (rows[i].key === "agents-running") result.agentsRunning = String(rows[i].mb || "").trim()
     else if (result.hasOwnProperty(rows[i].key)) result[rows[i].key] = parseFloat(rows[i].mb) || 0
   }
