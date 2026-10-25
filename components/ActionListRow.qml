@@ -13,14 +13,19 @@ CursorSurface {
   property bool actionVisible: true
   property bool actionEnabled: true
   property bool danger: true
+  // Armed = waiting for the second Enter/click; subtitle turns into the hint.
+  property bool armed: false
+  property string armedText: ""
 
   signal actionClicked()
   signal rowHovered()
 
   height: Theme.rowHeight
   foreground: Theme.fg
-  fill: Theme.hoverFill
+  fill: root.armed ? Theme.tint(Theme.urgent, 0.10) : Theme.hoverFill
   bordered: false
+  current: root.armed
+  currentFill: Theme.tint(Theme.urgent, 0.10)
 
   MouseArea {
     anchors.fill: parent
@@ -54,9 +59,9 @@ CursorSurface {
       width: infoCol.width
       elide: Text.ElideRight
       textFormat: Text.PlainText
-      visible: root.subtitle !== ""
-      text: root.subtitle
-      color: Theme.dim
+      visible: text !== ""
+      text: root.armed && root.armedText !== "" ? root.armedText : root.subtitle
+      color: root.armed ? Theme.urgent : Theme.dim
       font.family: Theme.fontFamily
       font.pixelSize: Theme.caption
     }
@@ -73,14 +78,16 @@ CursorSurface {
     height: Style.space(26)
     radius: Style.cornerRadius
     opacity: root.actionEnabled ? 1.0 : 0.45
-    color: actionMouse.containsMouse && root.actionEnabled
+    color: root.armed ? Theme.urgent
+      : actionMouse.containsMouse && root.actionEnabled
       ? (root.danger ? Theme.tint(Theme.urgent, Style.hoverFillAlpha) : Theme.hoverFill)
       : Theme.normalFill
 
     Text {
       anchors.centerIn: parent
-      text: root.actionLabel
-      color: Theme.fg
+      text: root.armed ? "Confirm" : root.actionLabel
+      color: root.armed ? Theme.background : Theme.fg
+      font.bold: root.armed
       font.family: Theme.fontFamily
       font.pixelSize: Theme.caption
     }

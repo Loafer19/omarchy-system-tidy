@@ -40,6 +40,9 @@ Panel {
   property bool systemdLoading: false
   property var cleanupStatus: ({ pacman: 0, coredump: 0, trash: 0, docker: 0, browser: 0, aur: 0, dev: 0, agents: 0, mise: 0, journal: 0 })
   property bool busy: false
+  // Two-step confirm: the first Enter/click arms a row (by stable key), the
+  // second runs it. Esc, moving the cursor, or 4 s of nothing disarms.
+  property string armedKey: ""
   property string statusText: ""
   property string statusKind: "progress" // "progress" | "done" | "error"
 
@@ -59,16 +62,16 @@ Panel {
   // Largest reclaimable first.
   readonly property var cleanupRows: {
     var rows = [
-      { key: "pacman", label: "Pacman cache", action: "clean", note: "Only cached packages you've already removed" },
-      { key: "aur", label: "AUR build cache", action: "clean", note: "yay/paru build artifacts, safe to delete" },
-      { key: "dev", label: "Dev tool caches", action: "clean", note: "pip, npm, cargo, go — all rebuild on demand" },
-      { key: "agents", label: "Agent caches", action: "clean", note: "Chat history & tmp — keeps login and settings" },
-      { key: "mise", label: "Mise unused", action: "clean", note: "mise prune + download cache" },
-      { key: "docker", label: "Docker (prune)", action: "clean", note: "Stopped containers & dangling images only" },
-      { key: "browser", label: "Browser cache", action: "clean", note: "Chrome/Chromium page cache — won't log you out" },
-      { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete" },
-      { key: "journal", label: "Journal logs", action: "clean", note: "Keeps the latest 100 MiB" },
-      { key: "trash", label: "Trash", action: "clean", note: "Empties the Trash folder" }
+      { key: "pacman", label: "Pacman cache", action: "clean", note: "Only cached packages you've already removed", warn: "Deletes cached packages of uninstalled software (needs password)" },
+      { key: "aur", label: "AUR build cache", action: "clean", note: "yay/paru build artifacts, safe to delete", warn: "Deletes ~/.cache/yay and ~/.cache/paru" },
+      { key: "dev", label: "Dev tool caches", action: "clean", note: "pip, npm, cargo, go — all rebuild on demand", warn: "Deletes pip/npm/cargo/go download caches" },
+      { key: "agents", label: "Agent caches", action: "clean", note: "Chat history & tmp — keeps login and settings", warn: "Deletes agent session history" },
+      { key: "mise", label: "Mise unused", action: "clean", note: "mise prune + download cache", warn: "Runs mise prune and clears its download cache" },
+      { key: "docker", label: "Docker (prune)", action: "clean", note: "Stopped containers & dangling images only", warn: "Runs docker system prune" },
+      { key: "browser", label: "Browser cache", action: "clean", note: "Chrome/Chromium page cache — won't log you out", warn: "Deletes browser page caches" },
+      { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete", warn: "Deletes all crash dumps (needs password)" },
+      { key: "journal", label: "Journal logs", action: "clean", note: "Keeps the latest 100 MiB", warn: "Vacuums the journal to 100 MiB (needs password)" },
+      { key: "trash", label: "Trash", action: "clean", note: "Empties the Trash folder", warn: "Permanently empties the Trash" }
     ]
     var status = root.cleanupStatus
     rows.sort(function(a, b) {
@@ -197,7 +200,34 @@ Panel {
     else if (root.activeTab === "launchers") root.setLaunchersFilter(key)
   }
 
+  function confirmHint(text) { return text + " — Enter/click again to confirm, Esc cancels" }
+
+  function rowKey(tab, item) {
+    if (!item) return ""
+    if (tab === "packages") return "packages:" + root.packagesFilter + ":" + (item.path || item.id || item.name)
+    if (tab === "cleanup") return "cleanup:" + item.key
+    return tab + ":" + (item.kind || "") + ":" + item.name
+  }
+
+  function disarm() {
+    root.armedKey = ""
+    disarmTimer.stop()
+  }
+
+  // Returns true when the action should run now (row was already armed).
+  function armOrConfirm(key) {
+    if (root.busy || key === "") return false
+    if (root.armedKey === key) {
+      root.disarm()
+      return true
+    }
+    root.armedKey = key
+    disarmTimer.restart()
+    return false
+  }
+
   function moveCursor(dx, dy) {
+    root.disarm()
     if (!root.ensureCursor()) return
 
     if (dy !== 0) {
@@ -285,7 +315,22 @@ Panel {
     var items = root.activeListItems
     if (root.selectedIndex < 0 || root.selectedIndex >= items.length) return
     var item = items[root.selectedIndex]
+    root.requestRowAction(item)
+  }
 
+  function rowActionAvailable(item) {
+    if (root.activeTab === "startup") return item.status === "enabled"
+    if (root.activeTab === "cleanup") return (parseFloat(root.cleanupStatus[item.key]) || 0) > 0
+    return true
+  }
+
+  function requestRowAction(item) {
+    if (!root.rowActionAvailable(item)) return
+    if (!root.armOrConfirm(root.rowKey(root.activeTab, item))) return
+    root.runRowAction(item)
+  }
+
+  function runRowAction(item) {
     if (root.activeTab === "packages") {
       if (root.packagesFilter === "pacnew") root.removePacnewFile(item.path, item.name)
       else if (root.packagesFilter === "agents") root.removeAgent(item.id, item.name)
@@ -305,6 +350,7 @@ Panel {
   }
 
   function setRowCursor(index) {
+    if (root.focusSection !== "rows" || root.selectedIndex !== index) root.disarm()
     root.cursorActive = true
     root.focusSection = "rows"
     root.selectedIndex = index
@@ -323,6 +369,7 @@ Panel {
   }
 
   onActiveTabChanged: {
+    root.disarm()
     root.selectedIndex = 0
     if (root.focusSection === "filters" && root.activeFilterChips.length === 0)
       root.focusSection = root.activeListItems.length > 0 ? "rows" : "tabs"
@@ -370,6 +417,7 @@ Panel {
   }
 
   onOpenedChanged: {
+    root.disarm()
     if (opened) {
       root.cursorActive = false
       root.focusSection = "rows"
@@ -388,6 +436,7 @@ Panel {
   }
 
   function setPackagesFilter(key) {
+    root.disarm()
     if (root.packagesFilter === key) return
     root.packagesFilter = key
     if (root.focusSection === "rows") root.selectedIndex = 0
@@ -404,12 +453,14 @@ Panel {
   }
 
   function setStartupFilter(key) {
+    root.disarm()
     if (root.startupFilter === key) return
     root.startupFilter = key
     if (root.focusSection === "rows") root.selectedIndex = 0
   }
 
   function setLaunchersFilter(key) {
+    root.disarm()
     if (root.launchersFilter === key) return
     root.launchersFilter = key
     if (root.focusSection === "rows") root.selectedIndex = 0
@@ -472,7 +523,10 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      onCloseRequested: root.close()
+      onCloseRequested: {
+        if (root.armedKey !== "") root.disarm()
+        else root.close()
+      }
       onTabRequested: function(direction) { root.cycleTab(direction) }
       onMoveRequested: function(dx, dy) { root.moveCursor(dx, dy) }
       onActivateRequested: root.activateCursor()
@@ -572,12 +626,14 @@ Panel {
             actionLabel: "Remove"
             actionEnabled: !root.busy
             danger: true
+            armed: root.armedKey !== "" && root.armedKey === root.rowKey("packages", modelData)
+            armedText: root.confirmHint(isPacnew ? "Deletes " + modelData.path
+              : isAgent ? "Uninstalls " + modelData.name + " (mise + stub)"
+              : "pacman -Rns " + modelData.name + " after a snapshot")
             onRowHovered: root.setRowCursor(index)
             onActionClicked: {
               root.setRowCursor(index)
-              if (isPacnew) root.removePacnewFile(modelData.path, modelData.name)
-              else if (isAgent) root.removeAgent(modelData.id, modelData.name)
-              else root.removePackage(modelData.name)
+              root.requestRowAction(modelData)
             }
           }
         }
@@ -608,10 +664,12 @@ Panel {
             actionLabel: "Remove"
             actionEnabled: !root.busy
             danger: true
+            armed: root.armedKey !== "" && root.armedKey === root.rowKey("launchers", modelData)
+            armedText: root.confirmHint("Deletes the launcher and its icon")
             onRowHovered: root.setRowCursor(index)
             onActionClicked: {
               root.setRowCursor(index)
-              root.removeLauncherItem(modelData)
+              root.requestRowAction(modelData)
             }
           }
         }
@@ -644,10 +702,12 @@ Panel {
             actionVisible: modelData.status === "enabled"
             actionEnabled: !root.busy
             danger: false
+            armed: root.armedKey !== "" && root.armedKey === root.rowKey("startup", modelData)
+            armedText: root.confirmHint("Stops it from starting at login")
             onRowHovered: root.setRowCursor(index)
             onActionClicked: {
               root.setRowCursor(index)
-              root.disableStartupItem(modelData)
+              root.requestRowAction(modelData)
             }
           }
         }
@@ -671,10 +731,12 @@ Panel {
             actionLabel: "Clean"
             actionEnabled: !root.busy && (parseFloat(root.cleanupStatus[modelData.key]) || 0) > 0
             danger: true
+            armed: root.armedKey !== "" && root.armedKey === root.rowKey("cleanup", modelData)
+            armedText: root.confirmHint(modelData.warn || ("Deletes " + modelData.label.toLowerCase()))
             onRowHovered: root.setRowCursor(index)
             onActionClicked: {
               root.setRowCursor(index)
-              root.runCleanup(modelData.key)
+              root.requestRowAction(modelData)
             }
           }
         }
@@ -809,6 +871,12 @@ Panel {
       })
       root.refreshActiveTab()
     }
+  }
+
+  Timer {
+    id: disarmTimer
+    interval: 4000
+    onTriggered: root.armedKey = ""
   }
 
   Timer {
