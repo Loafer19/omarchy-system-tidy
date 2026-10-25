@@ -45,7 +45,17 @@ function parseNameList(text) {
 }
 
 function parseAutostart(text) {
-  return sortByName(parseTsvRows(text, ["name", "status", "source"]))
+  return sortByName(parseTsvRows(text, ["name", "status", "source", "origin"]))
+}
+
+// Extra warning for autostart entries other things quietly depend on.
+function autostartWarning(name) {
+  var n = String(name || "")
+  if (/gnome-keyring|kwallet|keepassxc/.test(n)) return "apps may stop finding saved passwords"
+  if (/at-spi/.test(n)) return "screen readers and some apps' accessibility break"
+  if (/polkit|xdg-desktop-portal/.test(n)) return "password prompts or file pickers may stop working"
+  if (/fcitx|ibus/.test(n)) return "your input method won't start"
+  return ""
 }
 
 function parseSystemdUnits(text) {

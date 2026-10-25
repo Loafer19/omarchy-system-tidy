@@ -112,11 +112,11 @@ Panel {
   readonly property var startupItems: {
     if (root.startupFilter === "services") {
       return root.systemdUnits.map(function(u) {
-        return { name: u.name, status: u.status, kind: "systemd", detail: u.type }
+        return { name: u.name, status: u.status, kind: "systemd", detail: u.type, origin: "user", warning: "" }
       })
     }
     return root.autostartItems.map(function(a) {
-      return { name: a.name, status: a.status, kind: "autostart", detail: a.source }
+      return { name: a.name, status: a.status, kind: "autostart", detail: a.source, origin: a.origin || "user", warning: Model.autostartWarning(a.name) }
     })
   }
 
@@ -321,13 +321,19 @@ Panel {
   function rowActionAvailable(item) {
     if (root.activeTab === "packages" && (root.packagesFilter === "extra" || root.packagesFilter === "orphans"))
       return !item.protected
-    if (root.activeTab === "startup") return item.status === "enabled"
+    if (root.activeTab === "startup") return item.status === "enabled" || item.status === "disabled"
     if (root.activeTab === "cleanup") return (parseFloat(root.cleanupStatus[item.key]) || 0) > 0
     return true
   }
 
   function requestRowAction(item) {
     if (!root.rowActionAvailable(item)) return
+    // Re-enabling is harmless and undoable: no confirm step.
+    if (root.activeTab === "startup" && item.status === "disabled") {
+      root.disarm()
+      root.enableStartupItem(item)
+      return
+    }
     if (!root.armOrConfirm(root.rowKey(root.activeTab, item))) return
     root.runRowAction(item)
   }
@@ -345,6 +351,7 @@ Panel {
     }
     if (root.activeTab === "startup") {
       if (item.status === "enabled") root.disableStartupItem(item)
+      else if (item.status === "disabled") root.enableStartupItem(item)
       return
     }
     if (root.activeTab === "cleanup")
@@ -480,6 +487,10 @@ Panel {
   }
   function disableAutostart(name) { runAction(["autostart-disable", name], "Disabling " + name + "…") }
   function disableSystemdUnit(name) { runAction(["systemd-disable", name], "Disabling " + name + "…") }
+  function enableStartupItem(item) {
+    if (item.kind === "systemd") runAction(["systemd-enable", item.name], "Enabling " + item.name + "…")
+    else runAction(["autostart-enable", item.name], "Enabling " + item.name + "…")
+  }
   function disableStartupItem(item) {
     if (item.kind === "systemd") root.disableSystemdUnit(item.name)
     else root.disableAutostart(item.name)
@@ -703,13 +714,21 @@ Panel {
             width: ListView.view.width
             hasCursor: root.rowHasCursor("startup", index)
             title: modelData.name
-            subtitle: modelData.status + " · " + modelData.detail
-            actionLabel: "Disable"
-            actionVisible: modelData.status === "enabled"
+            subtitle: {
+              var where = modelData.kind === "systemd" ? modelData.detail + " · ~/.config/systemd/user"
+                : modelData.detail.replace(/^\/home\/[^\/]+/, "~")
+              return modelData.status + " · " + where
+            }
+            readonly property bool isEnabled: modelData.status === "enabled"
+            actionLabel: isEnabled ? "Disable" : "Enable"
             actionEnabled: !root.busy
-            danger: false
+            danger: isEnabled
+            badge: modelData.origin === "system" ? "system" : ""
+            badgeWarn: isEnabled && modelData.warning !== ""
             armed: root.armedKey !== "" && root.armedKey === root.rowKey("startup", modelData)
-            armedText: root.confirmHint("Stops it from starting at login")
+            armedText: root.confirmHint(modelData.warning !== ""
+              ? "Disabling: " + modelData.warning
+              : modelData.kind === "systemd" ? "Stops it now and at login" : "Stops it from starting at login")
             onRowHovered: root.setRowCursor(index)
             onActionClicked: {
               root.setRowCursor(index)

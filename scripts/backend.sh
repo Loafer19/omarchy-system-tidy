@@ -152,77 +152,137 @@ tui_remove() {
   omarchy-tui-remove "$1"
 }
 
+valid_entry_name() {
+  case "$1" in
+    "" | .* | -* | *..* | */* | *$'\n'*) return 1 ;;
+  esac
+  return 0
+}
+
+desktop_hidden() {
+  grep -qiE '^[[:space:]]*Hidden[[:space:]]*=[[:space:]]*true[[:space:]]*$' "$1" 2>/dev/null
+}
+
+# name, enabled|disabled, dir it was read from, system|user (system = a
+# vendor entry exists in /etc/xdg/autostart, whether or not overridden).
 autostart_list() {
-  local dirs=("$HOME/.config/autostart" "$ROOT/etc/xdg/autostart")
+  local user_dir="$HOME/.config/autostart" sys_dir="$ROOT/etc/xdg/autostart"
   declare -A seen
-  for d in "${dirs[@]}"; do
+  local d f name status origin
+  for d in "$user_dir" "$sys_dir"; do
     [ -d "$d" ] || continue
     for f in "$d"/*.desktop; do
       [ -f "$f" ] || continue
-      local name status
       name=$(basename "$f" .desktop)
       [ -n "${seen[$name]:-}" ] && continue
       seen[$name]=1
-      if grep -q '^Hidden=true' "$f" 2>/dev/null; then
-        status="disabled"
-      else
-        status="enabled"
-      fi
-      printf '%s\t%s\t%s\n' "$name" "$status" "$d"
+      if desktop_hidden "$f"; then status="disabled"; else status="enabled"; fi
+      origin="user"
+      [ -f "$sys_dir/$name.desktop" ] && origin="system"
+      printf '%s\t%s\t%s\t%s\n' "$name" "$status" "$d" "$origin"
     done
   done
+  return 0
+}
+
+autostart_name_arg() {
+  local name
+  name=$(basename -- "$1")
+  name=${name%.desktop}
+  valid_entry_name "$name" || { echo "refusing: invalid autostart name" >&2; exit 2; }
+  printf '%s' "$name"
 }
 
 autostart_disable() {
   [ "$#" -eq 0 ] && exit 0
-  local name="$1"
-  name=$(basename -- "$name")
-  name=${name%.desktop}
-  case "$name" in
-    "" | .* | *..* | */*) exit 1 ;;
-  esac
-  [[ "$name" != *$'\n'* && "$name" != *'/'* ]] || exit 1
-
-  local dir="$HOME/.config/autostart"
-  local target="$dir/$name.desktop"
+  local name dir target tmp
+  name=$(autostart_name_arg "$1") || exit 2
+  dir="$HOME/.config/autostart"
+  target="$dir/$name.desktop"
+  if [ -L "$target" ]; then
+    echo "refusing: $target is a symlink (managed elsewhere) — edit it there" >&2
+    exit 3
+  fi
   mkdir -p "$dir"
-
   # temp + rename so we never follow a symlink at $target.
-  local tmp
   tmp=$(mktemp "$dir/.tidy-tmp.XXXXXX") || exit 1
-
-  if [ -f "$target" ] && [ ! -L "$target" ]; then
-    if grep -q '^Hidden=' "$target" 2>/dev/null; then
-      sed 's/^Hidden=.*/Hidden=true/' "$target" > "$tmp"
+  if [ -f "$target" ]; then
+    if grep -qiE '^[[:space:]]*Hidden[[:space:]]*=' "$target"; then
+      sed -E 's/^[[:space:]]*[Hh][Ii][Dd][Dd][Ee][Nn][[:space:]]*=.*/Hidden=true/' "$target" > "$tmp"
     else
-      cat "$target" > "$tmp"
-      printf 'Hidden=true\n' >> "$tmp"
+      { cat "$target"; printf 'Hidden=true\n'; } > "$tmp"
     fi
   else
-    printf '[Desktop Entry]\nHidden=true\n' > "$tmp"
+    # Override a vendor entry: a stub with only Hidden=true (no Exec=).
+    printf '[Desktop Entry]\nType=Application\nName=%s\nHidden=true\n' "$name" > "$tmp"
   fi
-
   mv -f "$tmp" "$target"
 }
 
-# Only ~/.config/systemd/user/ — never vendor session units.
+autostart_enable() {
+  [ "$#" -eq 0 ] && exit 0
+  local name dir target tmp
+  name=$(autostart_name_arg "$1") || exit 2
+  dir="$HOME/.config/autostart"
+  target="$dir/$name.desktop"
+  if [ -L "$target" ]; then
+    echo "refusing: $target is a symlink (managed elsewhere) — edit it there" >&2
+    exit 3
+  fi
+  [ -f "$target" ] || exit 0   # vendor entry with no override is already enabled
+  # Our own override stub (no Exec=) over a vendor entry: just drop it.
+  if ! grep -qE '^[[:space:]]*Exec[[:space:]]*=' "$target" && [ -f "$ROOT/etc/xdg/autostart/$name.desktop" ]; then
+    rm -f -- "$target"
+    return 0
+  fi
+  tmp=$(mktemp "$dir/.tidy-tmp.XXXXXX") || exit 1
+  grep -viE '^[[:space:]]*Hidden[[:space:]]*=' "$target" > "$tmp" || true
+  mv -f "$tmp" "$target"
+}
+
+valid_unit_name() {
+  [[ "$1" =~ ^[A-Za-z0-9_][A-Za-z0-9:_.@-]*\.(service|timer|socket|path)$ ]]
+}
+
+user_unit_path() {
+  systemctl --user show "$1" -p FragmentPath --value 2>/dev/null || true
+}
+
+# Only units in ~/.config/systemd/user/ — never vendor session units.
 systemd_user_list() {
   command -v systemctl >/dev/null 2>&1 || return 0
-  local unit path
-  while read -r unit _; do
+  local unit state path
+  while read -r unit state _; do
     [ -z "$unit" ] && continue
-    path=$(systemctl --user show "$unit" -p FragmentPath --value 2>/dev/null)
+    valid_unit_name "$unit" || continue
+    path=$(user_unit_path "$unit")
     case "$path" in
       "$HOME"/.config/systemd/user/*) ;;
       *) continue ;;
     esac
-    printf '%s\tenabled\t%s\n' "$unit" "${unit##*.}"
-  done < <(systemctl --user list-unit-files --state=enabled --no-legend --no-pager 2>/dev/null)
+    printf '%s\t%s\t%s\n' "$unit" "$state" "${unit##*.}"
+  done < <(systemctl --user list-unit-files --state=enabled,disabled --no-legend --no-pager 2>/dev/null)
+  return 0
+}
+
+systemd_user_guard() {
+  valid_unit_name "$1" || { echo "refusing: invalid unit name" >&2; exit 2; }
+  case "$(user_unit_path "$1")" in
+    "$HOME"/.config/systemd/user/*) ;;
+    *) echo "refusing: $1 is not a unit in ~/.config/systemd/user" >&2; exit 2 ;;
+  esac
 }
 
 systemd_user_disable() {
   [ "$#" -eq 0 ] && exit 0
-  systemctl --user disable "$1"
+  systemd_user_guard "$1"
+  systemctl --user disable --now -- "$1"
+}
+
+systemd_user_enable() {
+  [ "$#" -eq 0 ] && exit 0
+  systemd_user_guard "$1"
+  systemctl --user enable --now -- "$1"
 }
 
 dir_size_mb() {
@@ -603,8 +663,10 @@ case "$cmd" in
   tui-remove) tui_remove "$@" ;;
   autostart-list) autostart_list ;;
   autostart-disable) autostart_disable "$@" ;;
+  autostart-enable) autostart_enable "$@" ;;
   systemd-list) systemd_user_list ;;
   systemd-disable) systemd_user_disable "$@" ;;
+  systemd-enable) systemd_user_enable "$@" ;;
   cleanup-status) cleanup_status ;;
   cleanup-run) cleanup_run "$@" ;;
   *) echo "unknown command: $cmd" >&2; exit 1 ;;

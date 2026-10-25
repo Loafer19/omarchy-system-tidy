@@ -138,5 +138,54 @@ st=$(B cleanup-status); expect "docker = containers + build cache + dangling, no
 touch "$FX/docker-denied"
 st=$(B cleanup-status); expect "docker socket denied -> 0 (was '00')" "$(v docker)" "0"
 rm -f "$FX/docker-denied"
+
+# ---------------------------------------------------------------- startup
+echo "== startup"
+ua=$HOME/.config/autostart sa=$TIDY_ROOT/etc/xdg/autostart
+mkdir -p "$ua" "$sa"
+printf '[Desktop Entry]\nExec=/usr/bin/gnome-keyring-daemon\n' > "$sa/gnome-keyring-secrets.desktop"
+printf '[Desktop Entry]\nExec=fcitx5\n' > "$sa/org.fcitx.Fcitx5.desktop"
+printf '[Desktop Entry]\nExec=steam -silent\nhidden = TRUE\n' > "$ua/steam.desktop"
+printf '[Desktop Entry]\nExec=mine\n' > "$HOME/real-mine.desktop"; ln -s "$HOME/real-mine.desktop" "$ua/mine.desktop"
+list=$(B autostart-list)
+expect "case/space-insensitive Hidden" "$(grep '^steam' <<<"$list" | cut -f2)" "disabled"
+expect "vendor entry is system" "$(grep '^gnome-keyring-secrets' <<<"$list" | cut -f2,4)" "$(printf 'enabled\tsystem')"
+B autostart-disable gnome-keyring-secrets
+expect "disable vendor = stub override" "$(grep -c '^Exec' "$ua/gnome-keyring-secrets.desktop"):$(grep -c '^Hidden=true' "$ua/gnome-keyring-secrets.desktop")" "0:1"
+expect "vendor file untouched" "$(cat "$sa/gnome-keyring-secrets.desktop")" "$(printf '[Desktop Entry]\nExec=/usr/bin/gnome-keyring-daemon')"
+expect "listed disabled" "$(B autostart-list | grep '^gnome-keyring-secrets' | cut -f2)" "disabled"
+B autostart-enable gnome-keyring-secrets
+gone "enable drops our stub" "$ua/gnome-keyring-secrets.desktop"
+expect "listed enabled again" "$(B autostart-list | grep '^gnome-keyring-secrets' | cut -f2)" "enabled"
+B autostart-enable steam
+expect "enable user entry keeps Exec, drops Hidden" "$(cat "$ua/steam.desktop")" "$(printf '[Desktop Entry]\nExec=steam -silent')"
+B autostart-disable steam
+expect "disable user entry appends Hidden" "$(tail -1 "$ua/steam.desktop")" "Hidden=true"
+err=$(B autostart-disable mine 2>&1); rc=$?
+expect "symlinked entry refused" "$rc" "3"
+expect_has "symlink message" "$err" "symlink"
+expect "symlink target untouched" "$(cat "$HOME/real-mine.desktop")" "$(printf '[Desktop Entry]\nExec=mine')"
+B autostart-disable ../escape; gone "path in name is stripped to basename" "$HOME/.config/escape.desktop"
+rm -f "$ua/escape.desktop"
+for bad in .. .hidden -x; do B autostart-disable "$bad" >/dev/null 2>&1; expect "bad autostart name '$bad' refused" "$?" "2"; done
+
+printf 'fluxd.service enabled enabled\nold.timer disabled enabled\nvendor.service enabled enabled\n' > "$FX/systemctl.--user.list-unit-files"
+cat > "$bin/systemctl" <<'S'
+#!/usr/bin/env bash
+printf "systemctl %s\n" "$*" >> "$CALLS"
+case "$*" in
+  *list-unit-files*) cat "$FX/systemctl.--user.list-unit-files" ;;
+  *"show vendor.service"*) echo /usr/lib/systemd/user/vendor.service ;;
+  *"show "*) set -- $*; echo "$HOME/.config/systemd/user/$3" ;;
+esac
+exit 0
+S
+chmod +x "$bin/systemctl"
+expect "systemd list: user units incl. disabled, no vendor" "$(B systemd-list | cut -f1,2 | tr '\t\n' ': ')" "fluxd.service:enabled old.timer:disabled "
+reset_calls; B systemd-disable fluxd.service; expect_has "disable --now --" "$(calls)" "systemctl --user disable --now -- fluxd.service"
+reset_calls; B systemd-enable old.timer; expect_has "enable --now --" "$(calls)" "systemctl --user enable --now -- old.timer"
+reset_calls; B systemd-disable vendor.service >/dev/null 2>&1; expect "vendor unit refused" "$?:$(calls | grep -c disable)" "2:0"
+reset_calls; B systemd-disable --global >/dev/null 2>&1; expect "option-like unit refused" "$?:$(calls)" "2:"
+
 printf '\nRESULT  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
