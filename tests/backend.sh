@@ -37,7 +37,11 @@ stub expac 'shift 2; fmt=$1; shift; for p in "$@"; do grep -P "^$p\t" "$FX/sizes
 stub pkexec
 stub paccache 'cat "$FX/paccache" 2>/dev/null'
 stub systemctl 'cat "$FX/systemctl.$1.$2" 2>/dev/null; exit 0'
-stub docker 'cat "$FX/docker" 2>/dev/null'
+stub docker '[ -f "$FX/docker-denied" ] && { echo "permission denied" >&2; exit 1; }
+case "$1 $2" in
+  "system df") cat "$FX/docker-df" 2>/dev/null ;;
+  "images -f") cat "$FX/docker-dangling" 2>/dev/null ;;
+esac'
 stub mise
 stub journalctl 'cat "$FX/journal" 2>/dev/null'
 stub omarchy
@@ -113,5 +117,26 @@ gone "codex tmp cleared when idle" "$HOME/.codex/tmp/t"
 exists "memories dir inside a cache dir kept" "$HOME/.codex/tmp/memories/keep"
 exists "codex memories still kept" "$HOME/.codex/memories_1.sqlite"
 
+
+# ---------------------------------------------------------------- sizes
+echo "== reclaimable sizes"
+mkdir -p "$TIDY_ROOT/var/cache/pacman/pkg"; head -c 3000000 /dev/zero > "$TIDY_ROOT/var/cache/pacman/pkg/x.pkg.tar.zst"
+printf '\n==> finished dry run: 49 candidates (disk space saved: 289.42 MiB)\n' > "$FX/paccache"
+st=$(B cleanup-status)
+v() { awk -F'\t' -v k="$1" '$1==k{print $2}' <<<"$st"; }
+expect "pacman = paccache dry-run saving" "$(v pacman)" "289"
+expect "pacman-total = whole cache" "$(v pacman-total)" "3"
+expect_has "paccache dry run only" "$(calls)" "paccache -d -u -k0"
+expect_lacks "paccache never -r in status" "$(calls)" "paccache -r"
+printf '\n==> finished dry run: 3 candidates (disk space saved: 1.50 GiB)\n' > "$FX/paccache"
+st=$(B cleanup-status); expect "GiB converted" "$(v pacman)" "1536"
+printf '==> no candidate packages found for pruning\n' > "$FX/paccache"
+st=$(B cleanup-status); expect "nothing to prune" "$(v pacman)" "0"
+printf 'Images|1.2GB (50%%)\nContainers|512MB (100%%)\nLocal Volumes|9GB (90%%)\nBuild Cache|980.5kB\n' > "$FX/docker-df"
+printf '100MB\n20MB\n' > "$FX/docker-dangling"
+st=$(B cleanup-status); expect "docker = containers + build cache + dangling, no volumes" "$(v docker)" "633"
+touch "$FX/docker-denied"
+st=$(B cleanup-status); expect "docker socket denied -> 0 (was '00')" "$(v docker)" "0"
+rm -f "$FX/docker-denied"
 printf '\nRESULT  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -62,12 +62,12 @@ Panel {
   // Largest reclaimable first.
   readonly property var cleanupRows: {
     var rows = [
-      { key: "pacman", label: "Pacman cache", action: "clean", note: "Only cached packages you've already removed", warn: "Deletes cached packages of uninstalled software (needs password)" },
+      { key: "pacman", label: "Pacman cache", action: "clean", note: "Packages no longer installed", warn: "Deletes cached packages of uninstalled software (needs password)" },
       { key: "aur", label: "AUR build cache", action: "clean", note: "yay/paru build artifacts, safe to delete", warn: "Deletes ~/.cache/yay and ~/.cache/paru" },
       { key: "dev", label: "Dev tool caches", action: "clean", note: "pip, npm, cargo, go — all rebuild on demand", warn: "Deletes pip/npm/cargo/go download caches" },
       { key: "agents", label: "Agent caches", action: "clean", note: "Temp, logs & caches — keeps sessions, memories, login", warn: "Permanently deletes agent temp/log/cache dirs", irreversible: true },
       { key: "mise", label: "Mise unused", action: "clean", note: "mise prune + download cache", warn: "Runs mise prune and clears its download cache" },
-      { key: "docker", label: "Docker (prune)", action: "clean", note: "Stopped containers & dangling images only", warn: "Runs docker system prune" },
+      { key: "docker", label: "Docker (prune)", action: "clean", note: "Stopped containers, dangling images, build cache", warn: "Runs docker system prune (volumes and tagged images are kept)" },
       { key: "browser", label: "Browser cache", action: "clean", note: "Chrome/Chromium page cache — won't log you out", warn: "Deletes browser page caches" },
       { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete", warn: "Deletes all crash dumps (needs password)" },
       { key: "journal", label: "Journal logs", action: "clean", note: "Keeps the latest 100 MiB", warn: "Vacuums the journal to 100 MiB (needs password)" },
@@ -733,6 +733,8 @@ Panel {
             subtitle: {
               var size = Model.formatMib(root.cleanupStatus[modelData.key] || 0)
               var note = modelData.note
+              if (modelData.key === "pacman" && root.cleanupStatus.pacmanTotal > 0)
+                note += " · cache is " + Model.formatMib(root.cleanupStatus.pacmanTotal) + " in total"
               if (modelData.key === "agents" && root.cleanupStatus.agentsRunning)
                 note = "skips running: " + root.cleanupStatus.agentsRunning.split(" ").join(", ") + " · " + note
               return note !== "" ? size + " · " + note : size

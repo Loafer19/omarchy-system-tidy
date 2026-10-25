@@ -249,19 +249,54 @@ pkexec_safe_clear_dir() {
   ' _ "$d"
 }
 
+# "1.2GB", "512MB (40%)", "980.5kB", "0B" -> MiB on stdout (sums all lines).
+docker_sizes_to_mb() {
+  awk '
+    {
+      v = $1
+      if (v == "") next
+      n = v + 0
+      u = v; sub(/^[0-9.]+/, "", u)
+      if (u == "TB") total += n * 1024 * 1024
+      else if (u == "GB") total += n * 1024
+      else if (u == "MB") total += n
+      else if (u == "kB" || u == "KB") total += n / 1024
+      else if (u == "B") total += n / 1024 / 1024
+    }
+    END { printf "%.0f\n", total + 0 }
+  '
+}
+
+# What `docker system prune -f` frees: stopped containers, build cache and
+# dangling images (not every unused image — that needs -a, which we don't
+# run). Prints 0 when docker is missing or the socket isn't reachable.
 docker_size_mb() {
   command -v docker >/dev/null 2>&1 || { echo 0; return; }
-  docker system df --format '{{.Size}}' 2>/dev/null | awk '
-    {
-      v = $0
-      unit = substr(v, length(v) - 1, 2)
-      if (unit == "GB") { total += substr(v, 1, length(v) - 2) * 1024 }
-      else if (unit == "MB") { total += substr(v, 1, length(v) - 2) }
-      else if (unit == "kB" || unit == "KB") { total += substr(v, 1, length(v) - 2) / 1024 }
-      else if (substr(v, length(v), 1) == "B") { total += substr(v, 1, length(v) - 1) / 1024 / 1024 }
+  local df dangling
+  df=$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null) || { echo 0; return; }
+  dangling=$(docker images -f dangling=true --format '{{.Size}}' 2>/dev/null || true)
+  {
+    awk -F'|' '$1 != "Images" && $1 != "Local Volumes" { print $2 }' <<<"$df"
+    printf '%s\n' "$dangling"
+  } | docker_sizes_to_mb
+}
+
+# What `paccache -r -u -k0` would delete: cached packages that are no longer
+# installed. paccache's own dry run is unprivileged.
+pacman_reclaimable_mb() {
+  command -v paccache >/dev/null 2>&1 || { echo 0; return; }
+  local out
+  out=$(paccache -d -u -k0 -c "$ROOT/var/cache/pacman/pkg" 2>/dev/null || true)
+  awk '
+    match($0, /disk space saved: [0-9.]+ [KMGT]?i?B/) {
+      s = substr($0, RSTART + 18, RLENGTH - 18); split(s, p, " ")
+      n = p[1] + 0; u = p[2]
+      if (u == "TiB") n *= 1024 * 1024; else if (u == "GiB") n *= 1024
+      else if (u == "KiB") n /= 1024; else if (u == "B") n /= 1024 * 1024
+      found = n
     }
-    END { printf "%.0f", total + 0 }
-  ' || echo 0
+    END { printf "%.0f\n", found + 0 }
+  ' <<<"$out"
 }
 
 browser_cache_mb() {
@@ -500,7 +535,8 @@ mise_unused_clean() {
 }
 
 cleanup_status() {
-  printf 'pacman\t%s\n' "$(dir_size_mb "$ROOT/var/cache/pacman/pkg/")"
+  printf 'pacman\t%s\n' "$(pacman_reclaimable_mb)"
+  printf 'pacman-total\t%s\n' "$(dir_size_mb "$ROOT/var/cache/pacman/pkg/")"
   printf 'coredump\t%s\n' "$(dir_size_mb "$ROOT/var/lib/systemd/coredump/")"
   printf 'trash\t%s\n' "$(dir_size_mb "$HOME/.local/share/Trash/")"
   printf 'docker\t%s\n' "$(docker_size_mb)"
