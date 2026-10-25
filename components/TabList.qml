@@ -1,6 +1,6 @@
 import QtQuick
 import qs.Commons
-import "../theme"
+import "../vendor/yoyo-ui"
 
 // One tab body: optional filter chips, the list, and its loading/empty text.
 Item {

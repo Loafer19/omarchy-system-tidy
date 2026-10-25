@@ -82,12 +82,20 @@ On several monitors this opens the panel on the focused one. The legacy
 ## Tests
 
 ```bash
-tests/run.sh   # node tests/model.test.js + bash tests/backend.sh
+tests/run.sh   # tools/sync-ui.sh --check + node tests/model.test.js + bash tests/backend.sh
 ```
 
 The backend tests run against stubbed `pacman`, `expac`, `pkexec`,
 `paccache`, `systemctl`, `docker`, `mise` and `journalctl` in a temporary
 `HOME`; they never touch the real system.
+
+## Shared UI
+
+Theme, chips, empty states and the footer come from
+[omarchy-yoyo-ui](https://github.com/Loafer19/omarchy-yoyo-ui), vendored in
+`vendor/yoyo-ui/` (pinned commit in `vendor/yoyo-ui/VERSION`). Don't edit it
+by hand (`tools/sync-ui.sh --check` fails); update with
+`tools/sync-ui.sh <tag>`.
 
 ## Install
 

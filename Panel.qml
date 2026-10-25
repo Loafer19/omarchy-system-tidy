@@ -6,7 +6,7 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 import "components" as Tidy
-import "theme"
+import "vendor/yoyo-ui"
 
 Panel {
   id: root
@@ -46,8 +46,9 @@ Panel {
   // Two-step confirm: the first Enter/click arms a row (by stable key), the
   // second runs it. Esc, moving the cursor, or 4 s of nothing disarms.
   property string armedKey: ""
-  property string statusText: ""
-  property string statusKind: "progress" // "progress" | "done" | "error"
+  // Footer status lives in the shared StatusFooter (progress / done / error).
+  property alias statusText: footer.statusText
+  property alias statusKind: footer.statusKind
   property bool cleanupLoading: false
   property bool cleanupLoaded: false
 
@@ -461,8 +462,7 @@ Panel {
   function runAction(args, message) {
     if (root.busy) return
     root.busy = true
-    root.statusText = message
-    root.statusKind = "progress"
+    footer.flash(message, "progress")
     actionProc.lastOut = ""
     actionProc.command = ["bash", root.backendPath].concat(args)
     actionProc.running = true
@@ -587,7 +587,7 @@ Panel {
         anchors.right: parent.right
         spacing: Style.space(8)
 
-        Tidy.ChipRow {
+        ChipRow {
           chips: root.tabs
           selectedKey: root.activeTab
           cursorActive: root.cursorActive && root.focusSection === "tabs"
@@ -799,50 +799,14 @@ Panel {
 
       // Footer: status (progress / done / error) replaces the key hints while
       // it is showing, so nothing above it moves.
-      Item {
+      StatusFooter {
         id: footer
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: Style.space(18)
-
-        Tidy.KeyHints {
-          anchors.left: parent.left
-          anchors.leftMargin: Theme.edge
-          anchors.verticalCenter: parent.verticalCenter
-          visible: root.statusText === ""
-          hints: root.keyHints
-        }
-
-        Text {
-          anchors.left: parent.left
-          anchors.leftMargin: Theme.edge
-          anchors.right: totalLabel.visible ? totalLabel.left : parent.right
-          anchors.rightMargin: Theme.edge
-          anchors.verticalCenter: parent.verticalCenter
-          visible: root.statusText !== ""
-          elide: Text.ElideRight
-          textFormat: Text.PlainText
-          text: root.statusText
-          color: root.statusKind === "error" ? Theme.urgent
-            : root.statusKind === "done" ? Theme.accent
-            : Theme.fg
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.caption
-          font.bold: true
-        }
-
-        Text {
-          id: totalLabel
-          anchors.right: parent.right
-          anchors.rightMargin: Theme.edge
-          anchors.verticalCenter: parent.verticalCenter
-          visible: root.activeTab === "cleanup" && root.cleanupLoaded
-          text: "≈ " + Model.formatMib(root.cleanupTotalMb) + " reclaimable"
-          color: Theme.dim
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.caption
-        }
+        hints: root.keyHints
+        rightText: root.activeTab === "cleanup" && root.cleanupLoaded
+          ? "≈ " + Model.formatMib(root.cleanupTotalMb) + " reclaimable" : ""
       }
 }
   }
@@ -1003,15 +967,9 @@ Panel {
     onExited: function(exitCode) {
       root.busy = false
       Qt.callLater(function() {
-        if (exitCode === 0) {
-          root.statusText = actionProc.lastOut !== "" ? "Done · " + actionProc.lastOut : "Done"
-          root.statusKind = "done"
-        } else if (root.statusKind !== "error") {
-          root.statusText = "Failed"
-          root.statusKind = "error"
-        }
-        statusClearTimer.interval = root.statusKind === "error" ? 6000 : 2500
-        statusClearTimer.restart()
+        // flash() clears it after 2.5 s (done) / 6 s (error).
+        if (exitCode === 0) footer.flash(actionProc.lastOut !== "" ? "Done · " + actionProc.lastOut : "Done", "done")
+        else footer.flash(root.statusKind === "error" ? root.statusText : "Failed", "error")
       })
       root.refreshActiveTab()
     }
@@ -1021,11 +979,5 @@ Panel {
     id: disarmTimer
     interval: 4000
     onTriggered: root.armedKey = ""
-  }
-
-  Timer {
-    id: statusClearTimer
-    interval: 2000
-    onTriggered: root.statusText = ""
   }
 }

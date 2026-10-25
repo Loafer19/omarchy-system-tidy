@@ -3,5 +3,6 @@
 # stubbed pacman/expac/pkexec/systemctl/docker in a temp HOME.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+tools/sync-ui.sh --check
 node tests/model.test.js
 bash tests/backend.sh
