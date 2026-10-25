@@ -65,13 +65,13 @@ Panel {
       { key: "pacman", label: "Pacman cache", action: "clean", note: "Only cached packages you've already removed", warn: "Deletes cached packages of uninstalled software (needs password)" },
       { key: "aur", label: "AUR build cache", action: "clean", note: "yay/paru build artifacts, safe to delete", warn: "Deletes ~/.cache/yay and ~/.cache/paru" },
       { key: "dev", label: "Dev tool caches", action: "clean", note: "pip, npm, cargo, go — all rebuild on demand", warn: "Deletes pip/npm/cargo/go download caches" },
-      { key: "agents", label: "Agent caches", action: "clean", note: "Chat history & tmp — keeps login and settings", warn: "Deletes agent session history" },
+      { key: "agents", label: "Agent caches", action: "clean", note: "Temp, logs & caches — keeps sessions, memories, login", warn: "Permanently deletes agent temp/log/cache dirs", irreversible: true },
       { key: "mise", label: "Mise unused", action: "clean", note: "mise prune + download cache", warn: "Runs mise prune and clears its download cache" },
       { key: "docker", label: "Docker (prune)", action: "clean", note: "Stopped containers & dangling images only", warn: "Runs docker system prune" },
       { key: "browser", label: "Browser cache", action: "clean", note: "Chrome/Chromium page cache — won't log you out", warn: "Deletes browser page caches" },
       { key: "coredump", label: "Coredumps", action: "clean", note: "Crash dumps (coredumpctl), safe to delete", warn: "Deletes all crash dumps (needs password)" },
       { key: "journal", label: "Journal logs", action: "clean", note: "Keeps the latest 100 MiB", warn: "Vacuums the journal to 100 MiB (needs password)" },
-      { key: "trash", label: "Trash", action: "clean", note: "Empties the Trash folder", warn: "Permanently empties the Trash" }
+      { key: "trash", label: "Trash", action: "clean", note: "Empties the Trash folder", warn: "Permanently empties the Trash", irreversible: true }
     ]
     var status = root.cleanupStatus
     rows.sort(function(a, b) {
@@ -433,6 +433,7 @@ Panel {
     root.busy = true
     root.statusText = message
     root.statusKind = "progress"
+    actionProc.lastOut = ""
     actionProc.command = ["bash", root.backendPath].concat(args)
     actionProc.running = true
   }
@@ -731,9 +732,14 @@ Panel {
             title: modelData.label
             subtitle: {
               var size = Model.formatMib(root.cleanupStatus[modelData.key] || 0)
-              return modelData.note !== "" ? size + " · " + modelData.note : size
+              var note = modelData.note
+              if (modelData.key === "agents" && root.cleanupStatus.agentsRunning)
+                note = "skips running: " + root.cleanupStatus.agentsRunning.split(" ").join(", ") + " · " + note
+              return note !== "" ? size + " · " + note : size
             }
             actionLabel: "Clean"
+            badge: modelData.irreversible ? "irreversible" : ""
+            badgeWarn: true
             actionEnabled: !root.busy && (parseFloat(root.cleanupStatus[modelData.key]) || 0) > 0
             danger: true
             armed: root.armedKey !== "" && root.armedKey === root.rowKey("cleanup", modelData)
@@ -855,6 +861,15 @@ Panel {
 
   Process {
     id: actionProc
+    property string lastOut: ""
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        // Only lines the backend tags with "tidy: " are meant for the user.
+        var lines = String(text || "").split("\n").filter(function(l) { return l.indexOf("tidy: ") === 0 })
+        actionProc.lastOut = lines.length > 0 ? lines[lines.length - 1].slice(6) : ""
+      }
+    }
     stderr: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -866,7 +881,7 @@ Panel {
       root.busy = false
       Qt.callLater(function() {
         if (exitCode === 0) {
-          root.statusText = "Done"
+          root.statusText = actionProc.lastOut !== "" ? "Done · " + actionProc.lastOut : "Done"
           root.statusKind = "done"
         } else if (root.statusKind !== "error") {
           root.statusText = "Failed"

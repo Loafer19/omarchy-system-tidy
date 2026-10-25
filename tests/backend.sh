@@ -76,5 +76,42 @@ reset_calls; B packages-remove '-Rdd' >/dev/null 2>&1; expect "flag injection re
 reset_calls; B packages-remove steam cmake; expect_has "allowed remove goes through pkexec" "$(calls)" "pkexec env PATH="
 expect_has "pacman args end with -- names" "$(calls)" "pacman -Rns --noconfirm -- \"\$@\""
 
+
+# ---------------------------------------------------------------- agents
+echo "== agent caches"
+mk() { mkdir -p "$(dirname "$1")"; head -c 2000000 /dev/zero > "$1"; }
+for f in .claude/cache/a .claude/paste-cache/b .claude/debug/c .claude/projects/-home-x/memory/MEMORY.md \
+  .claude/projects/-home-x/s1.jsonl .claude/history.jsonl .claude/settings.json .claude/.credentials.json \
+  .claude/plans/p.md .claude/file-history/f .claude/backups/b \
+  .codex/tmp/t .codex/log/l .codex/memories_1.sqlite .codex/goals_1.sqlite .codex/state_5.sqlite-wal \
+  .codex/sessions/2026/s.jsonl .codex/auth.json .codex/config.toml .codex/tmp/memories/keep \
+  .cache/opencode/x .local/share/opencode/log/y .local/share/opencode/storage/z .local/share/opencode/auth.json; do
+  mk "$HOME/$f"
+done
+st=$(B cleanup-status)
+expect "agents size counts only caches" "$(awk -F'\t' '$1=="agents"' <<<"$st")" "$(printf 'agents\t16')"
+expect "nothing running" "$(awk -F'\t' '$1=="agents-running"' <<<"$st")" "$(printf 'agents-running\t')"
+echo codex > "$FX/running"
+expect "running agent reported" "$(B cleanup-status | awk -F'\t' '$1=="agents-running"{print $2}')" "codex"
+out=$(B cleanup-run agents)
+expect "skip message" "$out" "tidy: skipped running codex"
+exists "running codex tmp untouched" "$HOME/.codex/tmp/t"
+gone "claude cache cleared" "$HOME/.claude/cache/a"
+gone "claude debug cleared" "$HOME/.claude/debug/c"
+gone "opencode cache cleared" "$HOME/.cache/opencode/x"
+gone "opencode log cleared" "$HOME/.local/share/opencode/log/y"
+for f in .claude/projects/-home-x/memory/MEMORY.md .claude/projects/-home-x/s1.jsonl .claude/history.jsonl \
+  .claude/settings.json .claude/.credentials.json .claude/plans/p.md .claude/file-history/f .claude/backups/b \
+  .codex/memories_1.sqlite .codex/goals_1.sqlite .codex/state_5.sqlite-wal .codex/sessions/2026/s.jsonl \
+  .codex/auth.json .codex/config.toml .local/share/opencode/storage/z .local/share/opencode/auth.json; do
+  exists "kept $f" "$HOME/$f"
+done
+: > "$FX/running"
+out=$(B cleanup-run agents)
+expect "no skip message when idle" "$out" ""
+gone "codex tmp cleared when idle" "$HOME/.codex/tmp/t"
+exists "memories dir inside a cache dir kept" "$HOME/.codex/tmp/memories/keep"
+exists "codex memories still kept" "$HOME/.codex/memories_1.sqlite"
+
 printf '\nRESULT  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

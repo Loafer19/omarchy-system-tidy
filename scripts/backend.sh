@@ -393,71 +393,83 @@ agents_remove() {
   fi
 }
 
-# Session/cache paths only — leave auth, settings, skills alone.
+# Agent caches: only temp files, logs and re-downloadable caches.
+# Never touched: sessions/transcripts (resume), memories*, goals*, any
+# *.sqlite state, projects/*/memory, history, plans, auth and config.
+# Format: agent|process-name|path (process-name is what pgrep looks for).
 agents_cache_paths() {
   local share="${XDG_DATA_HOME:-$HOME/.local/share}"
   local cache="${XDG_CACHE_HOME:-$HOME/.cache}"
   cat <<EOF
-$HOME/.claude/projects
-$HOME/.claude/cache
-$HOME/.claude/file-history
-$HOME/.claude/shell-snapshots
-$HOME/.claude/session-env
-$HOME/.claude/paste-cache
-$HOME/.claude/sessions
-$HOME/.claude/telemetry
-$HOME/.claude/backups
-$HOME/.claude/plans
-$HOME/.claude/jobs
-$HOME/.claude/plugins/cache
-$HOME/.claude/history.jsonl
-$HOME/.codex/.tmp
-$HOME/.codex/tmp
-$HOME/.pi/agent/sessions
-$HOME/.omp/agent/sessions
-$HOME/.omp/logs
-$HOME/.copilot/logs
-$share/opencode
-$cache/opencode
+claude|claude|$HOME/.claude/cache
+claude|claude|$HOME/.claude/paste-cache
+claude|claude|$HOME/.claude/shell-snapshots
+claude|claude|$HOME/.claude/session-env
+claude|claude|$HOME/.claude/telemetry
+claude|claude|$HOME/.claude/statsig
+claude|claude|$HOME/.claude/debug
+claude|claude|$HOME/.claude/plugins/cache
+codex|codex|$HOME/.codex/.tmp
+codex|codex|$HOME/.codex/tmp
+codex|codex|$HOME/.codex/log
+omp|omp|$HOME/.omp/logs
+copilot|copilot|$HOME/.copilot/logs
+opencode|opencode|$cache/opencode
+opencode|opencode|$share/opencode/log
 EOF
 }
 
+# A path whose last component looks like memory/goals/state is never cleared,
+# whatever the list above says.
+agent_path_is_precious() {
+  case "${1##*/}" in
+    memor* | goal* | *.sqlite* | auth* | config* | settings* | credentials* | projects | sessions | history*) return 0 ;;
+  esac
+  return 1
+}
+
+agent_running() {
+  pgrep -x "$1" >/dev/null 2>&1 && return 0
+  pgrep -f -- "(^|/)$1( |\$)" >/dev/null 2>&1
+}
+
+agents_running_list() {
+  local seen="" agent proc _path
+  while IFS='|' read -r agent proc _path; do
+    [[ " $seen " == *" $agent "* ]] && continue
+    agent_running "$proc" && seen="$seen $agent"
+  done < <(agents_cache_paths)
+  echo "${seen# }"
+}
+
 agents_cache_mb() {
-  local total=0 size path
-  while IFS= read -r path; do
-    [ -z "$path" ] && continue
-    if [ -d "$path" ]; then
-      size=$(dir_size_mb "$path")
-    elif [ -f "$path" ]; then
-      size=$(du -sm "$path" 2>/dev/null | cut -f1 || true)
-    else
-      size=0
-    fi
+  local total=0 size agent proc path
+  while IFS='|' read -r agent proc path; do
+    [ -n "$path" ] && [ -d "$path" ] && [ ! -L "$path" ] || continue
+    agent_path_is_precious "$path" && continue
+    size=$(dir_size_mb "$path")
     total=$((total + ${size:-0}))
   done < <(agents_cache_paths)
-  size=$(du -sm "$HOME"/.codex/*.sqlite "$HOME"/.codex/*.sqlite-wal "$HOME"/.codex/*.sqlite-shm 2>/dev/null \
-    | awk '{t += $1} END { printf "%.0f", t + 0 }' || echo 0)
-  total=$((total + ${size:-0}))
   echo "$total"
 }
 
 agents_cache_clean() {
-  local path opencode_share="${XDG_DATA_HOME:-$HOME/.local/share}/opencode"
-  while IFS= read -r path; do
-    [ -z "$path" ] && continue
-    [ -L "$path" ] && continue
-    if [ -d "$path" ]; then
-      if [ "$path" = "$opencode_share" ]; then
-        find "$path" -mindepth 1 -maxdepth 1 ! -name 'auth.json' -exec rm -rf {} + 2>/dev/null || true
-      else
-        safe_clear_dir "$path"
-      fi
-    elif [ -f "$path" ]; then
-      rm -f "$path"
+  local agent proc path skipped=""
+  while IFS='|' read -r agent proc path; do
+    [ -n "$path" ] || continue
+    [[ " $skipped " == *" $agent "* ]] && continue
+    if agent_running "$proc"; then
+      skipped="$skipped $agent"
+      continue
     fi
+    [ -L "$path" ] && continue
+    agent_path_is_precious "$path" && continue
+    [ -d "$path" ] || continue
+    find "$path" -mindepth 1 -maxdepth 1 ! -name 'memor*' ! -name 'goal*' ! -name '*.sqlite*' \
+      ! -name 'auth*' ! -name 'config*' -exec rm -rf -- {} + 2>/dev/null || true
   done < <(agents_cache_paths)
-  rm -f "$HOME/.claude/mcp-needs-auth-cache.json" "$HOME/.claude/daemon.log"
-  rm -f "$HOME"/.codex/*.sqlite "$HOME"/.codex/*.sqlite-wal "$HOME"/.codex/*.sqlite-shm
+  skipped="${skipped# }"
+  [ -n "$skipped" ] && echo "tidy: skipped running ${skipped// /, }"
   return 0
 }
 
@@ -496,6 +508,7 @@ cleanup_status() {
   printf 'aur\t%s\n' "$(aur_cache_mb)"
   printf 'dev\t%s\n' "$(dev_cache_mb)"
   printf 'agents\t%s\n' "$(agents_cache_mb)"
+  printf 'agents-running\t%s\n' "$(agents_running_list)"
   printf 'mise\t%s\n' "$(mise_unused_mb)"
   printf 'journal\t%s\n' "$(journal_size_mb)"
 }
