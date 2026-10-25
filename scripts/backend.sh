@@ -1,8 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_LIST="/usr/share/omarchy/install/omarchy-base.packages"
-OTHER_LIST="/usr/share/omarchy/install/omarchy-other.packages"
+# TIDY_ROOT only exists so tests/backend.sh can point the read-only system
+# paths at a fixture tree; it is empty in normal use.
+ROOT="${TIDY_ROOT:-}"
+BASE_LIST="$ROOT/usr/share/omarchy/install/omarchy-base.packages"
+OTHER_LIST="$ROOT/usr/share/omarchy/install/omarchy-other.packages"
+PACMAN_LOG="$ROOT/var/log/pacman.log"
+
+# Packages whose removal can leave the system unbootable, without sudo,
+# without snapshots or without a desktop. Never offered for removal and
+# refused by packages-remove even if asked directly.
+PROTECTED_RE='^(omarchy|omarchy-.+|omasnap|base|base-devel|filesystem|glibc|bash|coreutils|systemd|systemd-.+|dbus|dbus-.+|pacman|pacman-contrib|archlinux-keyring|expac|sudo|polkit|linux|linux-(lts|zen|hardened|rt)|linux(-lts|-zen|-hardened|-rt)?-headers|linux-firmware(-.+)?|.+-ucode|.+-dkms|dkms|mkinitcpio|mkinitcpio-.+|dracut|limine|limine-.+|grub|efibootmgr|snapper|snap-pac|btrfs-progs|cryptsetup|lvm2|plymouth|nvidia|nvidia-.+|lib32-nvidia-utils|mesa|lib32-mesa|vulkan-.+|hyprland|uwsm|quickshell|networkmanager|iwd|wpa_supplicant|greetd|sddm|pipewire|wireplumber)$'
+
+is_protected_pkg() {
+  [[ "$1" =~ $PROTECTED_RE ]]
+}
+
+valid_pkg_name() {
+  [[ "$1" =~ ^[a-zA-Z0-9@_+][a-zA-Z0-9@._+-]*$ ]]
+}
 
 defaults_set() {
   grep -hvE '^\s*#|^\s*$' "$BASE_LIST" "$OTHER_LIST" 2>/dev/null | sort -u || true
@@ -29,8 +46,10 @@ describe_packages() {
     [ -z "$pkg" ] && continue
     local size date
     size=$(expac -H M '%m' "$pkg" 2>/dev/null || echo "0")
-    date=$(grep -a "installed $pkg " /var/log/pacman.log 2>/dev/null | tail -1 | cut -d']' -f1 | tr -d '[' | cut -dT -f1 || true)
-    printf '%s\t%s\t%s\t%s\n' "$pkg" "${size:-0}" "${date:-unknown}" ""
+    date=$(grep -a "installed $pkg " "$PACMAN_LOG" 2>/dev/null | tail -1 | cut -d']' -f1 | tr -d '[' | cut -dT -f1 || true)
+    local prot=""
+    is_protected_pkg "$pkg" && prot="protected"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$pkg" "${size:-0}" "${date:-unknown}" "" "$prot"
   done
   return 0
 }
@@ -57,6 +76,17 @@ packages_last_used() {
 
 packages_remove() {
   [ "$#" -eq 0 ] && exit 0
+  local pkg
+  for pkg in "$@"; do
+    if ! valid_pkg_name "$pkg"; then
+      echo "refusing: invalid package name '$pkg'" >&2
+      exit 2
+    fi
+    if is_protected_pkg "$pkg"; then
+      echo "refusing: $pkg is a protected system package" >&2
+      exit 2
+    fi
+  done
   # omarchy-snapshot (multi-config); snapper fallback. Failure must not block remove.
   pkexec env PATH="/usr/share/omarchy/bin:/usr/bin:/bin:$PATH" \
     OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}" \
@@ -67,13 +97,13 @@ packages_remove() {
         snapper create -c number -d "$1" >/dev/null 2>&1 || true
       fi
       shift
-      exec pacman -Rns --noconfirm "$@"
+      exec pacman -Rns --noconfirm -- "$@"
     ' _ "system-tidy: before removing $*" "$@"
 }
 
 # Listing is unprivileged; remove needs root (/etc).
 packages_pacnew() {
-  (find /etc -xdev \( -name "*.pacnew" -o -name "*.pacsave" -o -name "*.pacorig" \) 2>/dev/null || true) | sort | while read -r f; do
+  (find "$ROOT/etc" -xdev \( -name "*.pacnew" -o -name "*.pacsave" -o -name "*.pacorig" \) 2>/dev/null || true) | sort | while read -r f; do
     [ -f "$f" ] || continue
     printf '%s\t%s\t%s\n' "$(basename "$f")" "$(stat -c%s "$f" 2>/dev/null || echo 0)" "$f"
   done
@@ -86,7 +116,7 @@ packages_pacnew_remove() {
   local resolved
   resolved=$(realpath -e -- "$1" 2>/dev/null) || exit 1
   case "$resolved" in
-    /etc/*) ;;
+    "$ROOT"/etc/*) ;;
     *) exit 1 ;;
   esac
   case "$resolved" in
@@ -123,7 +153,7 @@ tui_remove() {
 }
 
 autostart_list() {
-  local dirs=("$HOME/.config/autostart" "/etc/xdg/autostart")
+  local dirs=("$HOME/.config/autostart" "$ROOT/etc/xdg/autostart")
   declare -A seen
   for d in "${dirs[@]}"; do
     [ -d "$d" ] || continue
@@ -458,8 +488,8 @@ mise_unused_clean() {
 }
 
 cleanup_status() {
-  printf 'pacman\t%s\n' "$(dir_size_mb /var/cache/pacman/pkg/)"
-  printf 'coredump\t%s\n' "$(dir_size_mb /var/lib/systemd/coredump/)"
+  printf 'pacman\t%s\n' "$(dir_size_mb "$ROOT/var/cache/pacman/pkg/")"
+  printf 'coredump\t%s\n' "$(dir_size_mb "$ROOT/var/lib/systemd/coredump/")"
   printf 'trash\t%s\n' "$(dir_size_mb "$HOME/.local/share/Trash/")"
   printf 'docker\t%s\n' "$(docker_size_mb)"
   printf 'browser\t%s\n' "$(browser_cache_mb)"

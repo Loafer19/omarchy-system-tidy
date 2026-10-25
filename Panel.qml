@@ -200,7 +200,7 @@ Panel {
     else if (root.activeTab === "launchers") root.setLaunchersFilter(key)
   }
 
-  function confirmHint(text) { return text + " — Enter/click again to confirm, Esc cancels" }
+  function confirmHint(text) { return text + " — again to confirm" }
 
   function rowKey(tab, item) {
     if (!item) return ""
@@ -319,6 +319,8 @@ Panel {
   }
 
   function rowActionAvailable(item) {
+    if (root.activeTab === "packages" && (root.packagesFilter === "extra" || root.packagesFilter === "orphans"))
+      return !item.protected
     if (root.activeTab === "startup") return item.status === "enabled"
     if (root.activeTab === "cleanup") return (parseFloat(root.cleanupStatus[item.key]) || 0) > 0
     return true
@@ -618,13 +620,16 @@ Panel {
             subtitle: {
               if (isPacnew) return Model.formatBytes(modelData.bytes) + " · " + modelData.path
               if (isAgent) return Model.formatMib(modelData.sizeMb) + " · " + modelData.detail
-              var line = Model.formatMib(modelData.sizeMb) + " · installed " + modelData.date
+              var line = (modelData.protected ? "needed by the system · " : "") + Model.formatMib(modelData.sizeMb) + " · installed " + modelData.date
               if (modelData.lastUsed && modelData.lastUsed !== "")
                 line += " · used " + modelData.lastUsed
               return line
             }
+            readonly property bool isProtected: !isPacnew && !isAgent && !!modelData.protected
             actionLabel: "Remove"
+            actionVisible: !isProtected
             actionEnabled: !root.busy
+            badge: isProtected ? "protected" : ""
             danger: true
             armed: root.armedKey !== "" && root.armedKey === root.rowKey("packages", modelData)
             armedText: root.confirmHint(isPacnew ? "Deletes " + modelData.path

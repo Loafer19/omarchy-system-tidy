@@ -14,9 +14,22 @@ function parseTsvRows(text, fieldNames) {
   return rows
 }
 
+// Must match PROTECTED_RE in scripts/backend.sh (the backend is the
+// authority; this only keeps the UI honest if an old backend omits column 5).
+var PROTECTED_RE = /^(omarchy|omarchy-.+|omasnap|base|base-devel|filesystem|glibc|bash|coreutils|systemd|systemd-.+|dbus|dbus-.+|pacman|pacman-contrib|archlinux-keyring|expac|sudo|polkit|linux|linux-(lts|zen|hardened|rt)|linux(-lts|-zen|-hardened|-rt)?-headers|linux-firmware(-.+)?|.+-ucode|.+-dkms|dkms|mkinitcpio|mkinitcpio-.+|dracut|limine|limine-.+|grub|efibootmgr|snapper|snap-pac|btrfs-progs|cryptsetup|lvm2|plymouth|nvidia|nvidia-.+|lib32-nvidia-utils|mesa|lib32-mesa|vulkan-.+|hyprland|uwsm|quickshell|networkmanager|iwd|wpa_supplicant|greetd|sddm|pipewire|wireplumber)$/
+
+function isProtectedPackage(name) {
+  return PROTECTED_RE.test(String(name || ""))
+}
+
 function parsePackages(text) {
-  var rows = parseTsvRows(text, ["name", "sizeMb", "date", "lastUsed"])
-  rows.sort(function(a, b) { return parseFloat(b.sizeMb) - parseFloat(a.sizeMb) })
+  var rows = parseTsvRows(text, ["name", "sizeMb", "date", "lastUsed", "protected"])
+  for (var i = 0; i < rows.length; i++) rows[i].protected = rows[i].protected === "protected" || isProtectedPackage(rows[i].name)
+  // Removable first (largest first), protected system packages at the bottom.
+  rows.sort(function(a, b) {
+    if (a.protected !== b.protected) return a.protected ? 1 : -1
+    return parseFloat(b.sizeMb) - parseFloat(a.sizeMb)
+  })
   return rows
 }
 
@@ -75,7 +88,8 @@ function withLastUsed(packages, lastUsedMap) {
       name: p.name,
       sizeMb: p.sizeMb,
       date: p.date,
-      lastUsed: lastUsedMap[p.name] !== undefined ? lastUsedMap[p.name] : (p.lastUsed || "")
+      lastUsed: lastUsedMap[p.name] !== undefined ? lastUsedMap[p.name] : (p.lastUsed || ""),
+      protected: !!p.protected
     })
   }
   return out

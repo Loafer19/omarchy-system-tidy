@@ -16,6 +16,9 @@ CursorSurface {
   // Armed = waiting for the second Enter/click; subtitle turns into the hint.
   property bool armed: false
   property string armedText: ""
+  // Small pill before the action ("system", "irreversible"); warn = urgent tint.
+  property string badge: ""
+  property bool badgeWarn: false
 
   signal actionClicked()
   signal rowHovered()
@@ -38,7 +41,7 @@ CursorSurface {
     id: infoCol
     anchors.left: parent.left
     anchors.leftMargin: Theme.edge
-    anchors.right: actionBtn.left
+    anchors.right: badgePill.visible ? badgePill.left : (actionBtn.visible ? actionBtn.left : parent.right)
     anchors.rightMargin: Theme.edge
     anchors.verticalCenter: parent.verticalCenter
     spacing: Style.space(2)
@@ -62,6 +65,29 @@ CursorSurface {
       visible: text !== ""
       text: root.armed && root.armedText !== "" ? root.armedText : root.subtitle
       color: root.armed ? Theme.urgent : Theme.dim
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.caption
+    }
+  }
+
+  Rectangle {
+    id: badgePill
+    anchors.right: actionBtn.visible ? actionBtn.left : parent.right
+    anchors.rightMargin: Theme.edge
+    anchors.verticalCenter: parent.verticalCenter
+    z: 2
+    visible: root.badge !== ""
+    width: badgeText.implicitWidth + Style.space(12)
+    height: Style.space(18)
+    radius: height / 2
+    color: root.badgeWarn ? Theme.tint(Theme.urgent, 0.14) : Theme.normalFill
+
+    Text {
+      id: badgeText
+      anchors.centerIn: parent
+      text: root.badge
+      textFormat: Text.PlainText
+      color: root.badgeWarn ? Theme.urgent : Theme.dim
       font.family: Theme.fontFamily
       font.pixelSize: Theme.caption
     }
