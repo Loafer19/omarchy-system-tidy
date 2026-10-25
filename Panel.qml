@@ -6,6 +6,7 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 import "components" as Tidy
+import "theme"
 
 Panel {
   id: root
@@ -78,11 +79,8 @@ Panel {
 
   readonly property color contentForeground: bar ? bar.foreground : Commons.Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property color dividerColor: Qt.rgba(contentForeground.r, contentForeground.g, contentForeground.b, 0.12)
-
-  readonly property int edgeMargin: Style.space(6)
-  readonly property int rowGap: 0
-  readonly property int rowHeight: Style.space(44)
+  Binding { target: Theme; property: "foreground"; value: root.contentForeground }
+  Binding { target: Theme; property: "fontFamily"; value: root.contentFontFamily }
 
   readonly property var tabs: [
     { key: "packages", label: "Packages" },
@@ -255,13 +253,17 @@ Panel {
     }
   }
 
+  function rowHasCursor(tab, index) {
+    return root.cursorActive && root.focusSection === "rows" && root.activeTab === tab && root.selectedIndex === index
+  }
+
   function positionActiveList() {
     if (root.focusSection !== "rows") return
     var view = null
-    if (root.activeTab === "packages") view = packagesList
-    else if (root.activeTab === "launchers") view = launchersList
-    else if (root.activeTab === "startup") view = startupList
-    else if (root.activeTab === "cleanup") view = cleanupList
+    if (root.activeTab === "packages") view = packagesTab.view
+    else if (root.activeTab === "launchers") view = launchersTab.view
+    else if (root.activeTab === "startup") view = startupTab.view
+    else if (root.activeTab === "cleanup") view = cleanupTab.view
     if (view && root.selectedIndex >= 0 && root.selectedIndex < view.count)
       view.positionViewAtIndex(root.selectedIndex, ListView.Contain)
   }
@@ -485,8 +487,6 @@ Panel {
         Tidy.ChipRow {
           chips: root.tabs
           selectedKey: root.activeTab
-          foreground: root.contentForeground
-          fontFamily: root.contentFontFamily
           cursorActive: root.cursorActive && root.focusSection === "tabs"
           cursorIndex: root.cursorActive && root.focusSection === "tabs" ? root.selectedIndex : -1
           onSelected: function(key) {
@@ -496,19 +496,19 @@ Panel {
           onChipHovered: function(index) { root.setTabsCursor(index) }
         }
 
-        Rectangle { width: parent.width; height: Style.spacing.hairline; color: root.dividerColor }
+        Rectangle { width: parent.width; height: Style.spacing.hairline; color: Theme.line }
 
         Text {
           id: statusLabel
           visible: opacity > 0
-          leftPadding: root.edgeMargin
-          width: parent.width - root.edgeMargin
+          leftPadding: Theme.edge
+          width: parent.width - Theme.edge
           elide: Text.ElideRight
-          color: root.statusKind === "error" ? Commons.Color.urgent
-            : root.statusKind === "done" ? Commons.Color.accent
-            : root.contentForeground
-          font.family: root.contentFontFamily
-          font.pixelSize: Style.font.body
+          color: root.statusKind === "error" ? Theme.urgent
+            : root.statusKind === "done" ? Theme.accent
+            : Theme.fg
+          font.family: Theme.fontFamily
+          font.pixelSize: Theme.body
           font.bold: true
           opacity: root.statusText !== "" ? 1 : 0
 
@@ -526,54 +526,40 @@ Panel {
       Item {
         id: body
         anchors.top: header.bottom
-        anchors.topMargin: root.edgeMargin
+        anchors.topMargin: Theme.edge
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 
-        Tidy.ChipRow {
-          id: packagesFilterRow
+        Tidy.TabList {
+          id: packagesTab
+          anchors.fill: parent
           visible: root.activeTab === "packages"
-          anchors.top: parent.top
-          anchors.left: parent.left
-          compact: true
           chips: root.packagesChips
           selectedKey: root.packagesFilter
-          foreground: root.contentForeground
-          fontFamily: root.contentFontFamily
-          cursorActive: root.cursorActive && root.focusSection === "filters" && root.activeTab === "packages"
-          cursorIndex: root.cursorActive && root.focusSection === "filters" && root.activeTab === "packages" ? root.selectedIndex : -1
-          onSelected: function(key) {
+          chipCursorActive: root.cursorActive && root.focusSection === "filters" && root.activeTab === "packages"
+          chipCursorIndex: chipCursorActive ? root.selectedIndex : -1
+          model: root.packagesFilter === "pacnew" ? root.pacnewFiles
+            : root.packagesFilter === "agents" ? root.agents
+            : root.packages
+          loading: root.packagesViewLoading
+          emptyText: root.packagesFilter === "orphans" ? "No orphaned packages"
+            : root.packagesFilter === "pacnew" ? "No .pacnew/.pacsave/.pacorig files found"
+            : root.packagesFilter === "agents" ? "No agent CLIs installed"
+            : "No packages beyond the Omarchy defaults"
+          onChipSelected: function(key) {
             root.setPackagesFilter(key)
             root.setFiltersCursor(root.chipIndexByKey(root.packagesChips, key))
           }
           onChipHovered: function(index) { root.setFiltersCursor(index) }
-        }
 
-        ListView {
-          id: packagesList
-          anchors.top: packagesFilterRow.bottom
-          anchors.topMargin: root.edgeMargin
-          anchors.left: parent.left
-          anchors.right: parent.right
-          anchors.bottom: parent.bottom
-          visible: root.activeTab === "packages"
-          clip: true
-          spacing: root.rowGap
-          model: root.packagesFilter === "pacnew" ? root.pacnewFiles
-            : root.packagesFilter === "agents" ? root.agents
-            : root.packages
           delegate: Tidy.ActionListRow {
             required property var modelData
             required property int index
             readonly property bool isPacnew: root.packagesFilter === "pacnew"
             readonly property bool isAgent: root.packagesFilter === "agents"
             width: ListView.view.width
-            rowHeight: root.rowHeight
-            edgeMargin: root.edgeMargin
-            contentForeground: root.contentForeground
-            contentFontFamily: root.contentFontFamily
-            hasCursor: root.cursorActive && root.focusSection === "rows" && root.activeTab === "packages" && root.selectedIndex === index
+            hasCursor: root.rowHasCursor("packages", index)
             title: modelData.name
             subtitle: {
               if (isPacnew) return Model.formatBytes(modelData.bytes) + " · " + modelData.path
@@ -596,69 +582,28 @@ Panel {
           }
         }
 
-        Text {
-          anchors.centerIn: parent
-          visible: root.activeTab === "packages" && root.packagesViewLoading && root.packagesViewEmpty
-          text: "Loading…"
-          color: Qt.darker(root.contentForeground, 1.5)
-          font.family: root.contentFontFamily
-          font.pixelSize: Style.font.body
-        }
-
-        Text {
-          anchors.centerIn: parent
-          visible: root.activeTab === "packages" && !root.packagesViewLoading && root.packagesViewEmpty
-          text: root.packagesFilter === "orphans"
-            ? "No orphaned packages"
-            : root.packagesFilter === "pacnew"
-            ? "No .pacnew/.pacsave/.pacorig files found"
-            : root.packagesFilter === "agents"
-            ? "No agent CLIs installed"
-            : "No packages beyond the Omarchy defaults"
-          color: Qt.darker(root.contentForeground, 1.5)
-          font.family: root.contentFontFamily
-          font.pixelSize: Style.font.body
-        }
-
-        Tidy.ChipRow {
-          id: launchersFilterRow
+        Tidy.TabList {
+          id: launchersTab
+          anchors.fill: parent
           visible: root.activeTab === "launchers"
-          anchors.top: parent.top
-          anchors.left: parent.left
-          compact: true
           chips: root.launchersChips
           selectedKey: root.launchersFilter
-          foreground: root.contentForeground
-          fontFamily: root.contentFontFamily
-          cursorActive: root.cursorActive && root.focusSection === "filters" && root.activeTab === "launchers"
-          cursorIndex: root.cursorActive && root.focusSection === "filters" && root.activeTab === "launchers" ? root.selectedIndex : -1
-          onSelected: function(key) {
+          chipCursorActive: root.cursorActive && root.focusSection === "filters" && root.activeTab === "launchers"
+          chipCursorIndex: chipCursorActive ? root.selectedIndex : -1
+          model: root.launchersItems
+          loading: root.launchersViewLoading
+          emptyText: root.launchersFilter === "tuis" ? "No TUI launchers found" : "No Web App launchers found"
+          onChipSelected: function(key) {
             root.setLaunchersFilter(key)
             root.setFiltersCursor(root.chipIndexByKey(root.launchersChips, key))
           }
           onChipHovered: function(index) { root.setFiltersCursor(index) }
-        }
 
-        ListView {
-          id: launchersList
-          anchors.top: launchersFilterRow.bottom
-          anchors.topMargin: root.edgeMargin
-          anchors.left: parent.left
-          anchors.right: parent.right
-          anchors.bottom: parent.bottom
-          visible: root.activeTab === "launchers"
-          clip: true
-          spacing: root.rowGap
-          model: root.launchersItems
           delegate: Tidy.ActionListRow {
             required property var modelData
             required property int index
             width: ListView.view.width
-            rowHeight: root.rowHeight
-            edgeMargin: root.edgeMargin
-            contentForeground: root.contentForeground
-            contentFontFamily: root.contentFontFamily
-            hasCursor: root.cursorActive && root.focusSection === "rows" && root.activeTab === "launchers" && root.selectedIndex === index
+            hasCursor: root.rowHasCursor("launchers", index)
             title: modelData.name
             actionLabel: "Remove"
             actionEnabled: !root.busy
@@ -671,65 +616,28 @@ Panel {
           }
         }
 
-        Text {
-          anchors.centerIn: parent
-          visible: root.activeTab === "launchers" && root.launchersViewLoading && root.launchersItems.length === 0
-          text: "Loading…"
-          color: Qt.darker(root.contentForeground, 1.5)
-          font.family: root.contentFontFamily
-          font.pixelSize: Style.font.body
-        }
-
-        Text {
-          anchors.centerIn: parent
-          visible: root.activeTab === "launchers" && !root.launchersViewLoading && root.launchersItems.length === 0
-          text: root.launchersFilter === "tuis"
-            ? "No TUI launchers found"
-            : "No Web App launchers found"
-          color: Qt.darker(root.contentForeground, 1.5)
-          font.family: root.contentFontFamily
-          font.pixelSize: Style.font.body
-        }
-
-        Tidy.ChipRow {
-          id: startupFilterRow
+        Tidy.TabList {
+          id: startupTab
+          anchors.fill: parent
           visible: root.activeTab === "startup"
-          anchors.top: parent.top
-          anchors.left: parent.left
-          compact: true
           chips: root.startupChips
           selectedKey: root.startupFilter
-          foreground: root.contentForeground
-          fontFamily: root.contentFontFamily
-          cursorActive: root.cursorActive && root.focusSection === "filters" && root.activeTab === "startup"
-          cursorIndex: root.cursorActive && root.focusSection === "filters" && root.activeTab === "startup" ? root.selectedIndex : -1
-          onSelected: function(key) {
+          chipCursorActive: root.cursorActive && root.focusSection === "filters" && root.activeTab === "startup"
+          chipCursorIndex: chipCursorActive ? root.selectedIndex : -1
+          model: root.startupItems
+          loading: root.startupViewLoading
+          emptyText: root.startupFilter === "services" ? "No user-added systemd services found" : "No autostart entries found"
+          onChipSelected: function(key) {
             root.setStartupFilter(key)
             root.setFiltersCursor(root.chipIndexByKey(root.startupChips, key))
           }
           onChipHovered: function(index) { root.setFiltersCursor(index) }
-        }
 
-        ListView {
-          id: startupList
-          anchors.top: startupFilterRow.bottom
-          anchors.topMargin: root.edgeMargin
-          anchors.left: parent.left
-          anchors.right: parent.right
-          anchors.bottom: parent.bottom
-          visible: root.activeTab === "startup"
-          clip: true
-          spacing: root.rowGap
-          model: root.startupItems
           delegate: Tidy.ActionListRow {
             required property var modelData
             required property int index
             width: ListView.view.width
-            rowHeight: root.rowHeight
-            edgeMargin: root.edgeMargin
-            contentForeground: root.contentForeground
-            contentFontFamily: root.contentFontFamily
-            hasCursor: root.cursorActive && root.focusSection === "rows" && root.activeTab === "startup" && root.selectedIndex === index
+            hasCursor: root.rowHasCursor("startup", index)
             title: modelData.name
             subtitle: modelData.status + " · " + modelData.detail
             actionLabel: "Disable"
@@ -744,43 +652,17 @@ Panel {
           }
         }
 
-        Text {
-          anchors.centerIn: parent
-          visible: root.activeTab === "startup" && root.startupViewLoading && root.startupItems.length === 0
-          text: "Loading…"
-          color: Qt.darker(root.contentForeground, 1.5)
-          font.family: root.contentFontFamily
-          font.pixelSize: Style.font.body
-        }
-
-        Text {
-          anchors.centerIn: parent
-          visible: root.activeTab === "startup" && !root.startupViewLoading && root.startupItems.length === 0
-          text: root.startupFilter === "services"
-            ? "No user-added systemd services found"
-            : "No autostart entries found"
-          color: Qt.darker(root.contentForeground, 1.5)
-          font.family: root.contentFontFamily
-          font.pixelSize: Style.font.body
-        }
-
-        ListView {
-          id: cleanupList
+        Tidy.TabList {
+          id: cleanupTab
           anchors.fill: parent
           visible: root.activeTab === "cleanup"
-          clip: true
-          spacing: root.rowGap
           model: root.cleanupRows
 
           delegate: Tidy.ActionListRow {
             required property var modelData
             required property int index
             width: ListView.view.width
-            rowHeight: root.rowHeight
-            edgeMargin: root.edgeMargin
-            contentForeground: root.contentForeground
-            contentFontFamily: root.contentFontFamily
-            hasCursor: root.cursorActive && root.focusSection === "rows" && root.activeTab === "cleanup" && root.selectedIndex === index
+            hasCursor: root.rowHasCursor("cleanup", index)
             title: modelData.label
             subtitle: {
               var size = Model.formatMib(root.cleanupStatus[modelData.key] || 0)

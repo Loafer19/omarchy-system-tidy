@@ -1,7 +1,7 @@
-import qs.Commons as Commons
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../theme"
 
 // Title + subtitle with a right-edge action; row highlight via hasCursor.
 CursorSurface {
@@ -13,23 +13,14 @@ CursorSurface {
   property bool actionVisible: true
   property bool actionEnabled: true
   property bool danger: true
-  property color contentForeground: Commons.Color.foreground
-  property string contentFontFamily: Style.font.family
-  property int edgeMargin: Style.space(6)
-  property int rowHeight: Style.space(44)
 
   signal actionClicked()
   signal rowHovered()
 
-  height: rowHeight
-  foreground: contentForeground
-  fill: Style.hoverFillFor(contentForeground, Commons.Color.accent, Commons.Color.urgent)
+  height: Theme.rowHeight
+  foreground: Theme.fg
+  fill: Theme.hoverFill
   bordered: false
-
-  readonly property color actionNormalFill: Style.normalFillFor(contentForeground, Commons.Color.accent, Commons.Color.urgent)
-  readonly property color actionHoverFill: danger
-    ? Util.alpha(Commons.Color.urgent, Style.hoverFillAlpha)
-    : Style.hoverFillFor(contentForeground, Commons.Color.accent, Commons.Color.urgent)
 
   MouseArea {
     anchors.fill: parent
@@ -41,9 +32,9 @@ CursorSurface {
   Column {
     id: infoCol
     anchors.left: parent.left
-    anchors.leftMargin: root.edgeMargin
+    anchors.leftMargin: Theme.edge
     anchors.right: actionBtn.left
-    anchors.rightMargin: root.edgeMargin
+    anchors.rightMargin: Theme.edge
     anchors.verticalCenter: parent.verticalCenter
     spacing: Style.space(2)
     z: 1
@@ -51,28 +42,30 @@ CursorSurface {
     Text {
       width: infoCol.width
       elide: Text.ElideRight
+      textFormat: Text.PlainText
       visible: root.title !== ""
       text: root.title
-      color: root.contentForeground
-      font.family: root.contentFontFamily
-      font.pixelSize: Style.font.body
+      color: Theme.fg
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.body
       font.bold: true
     }
     Text {
       width: infoCol.width
       elide: Text.ElideRight
+      textFormat: Text.PlainText
       visible: root.subtitle !== ""
       text: root.subtitle
-      color: Qt.darker(root.contentForeground, 1.5)
-      font.family: root.contentFontFamily
-      font.pixelSize: Style.font.caption
+      color: Theme.dim
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.caption
     }
   }
 
   Rectangle {
     id: actionBtn
     anchors.right: parent.right
-    anchors.rightMargin: root.edgeMargin
+    anchors.rightMargin: Theme.edge
     anchors.verticalCenter: parent.verticalCenter
     z: 2
     visible: root.actionVisible && root.actionLabel !== ""
@@ -80,14 +73,16 @@ CursorSurface {
     height: Style.space(26)
     radius: Style.cornerRadius
     opacity: root.actionEnabled ? 1.0 : 0.45
-    color: actionMouse.containsMouse && root.actionEnabled ? root.actionHoverFill : root.actionNormalFill
+    color: actionMouse.containsMouse && root.actionEnabled
+      ? (root.danger ? Theme.tint(Theme.urgent, Style.hoverFillAlpha) : Theme.hoverFill)
+      : Theme.normalFill
 
     Text {
       anchors.centerIn: parent
       text: root.actionLabel
-      color: root.contentForeground
-      font.family: root.contentFontFamily
-      font.pixelSize: Style.font.caption
+      color: Theme.fg
+      font.family: Theme.fontFamily
+      font.pixelSize: Theme.caption
     }
 
     MouseArea {

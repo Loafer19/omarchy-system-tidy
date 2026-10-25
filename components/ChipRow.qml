@@ -1,6 +1,6 @@
-import qs.Commons as Commons
 import QtQuick
 import qs.Commons
+import "../theme"
 
 // Fill-only chips; cursor via cursorIndex (not containsMouse).
 Row {
@@ -9,8 +9,6 @@ Row {
   property var chips: []
   property string selectedKey: ""
   property bool compact: false
-  property color foreground: Commons.Color.foreground
-  property string fontFamily: Style.font.family
   property int cursorIndex: -1
   property bool cursorActive: false
 
@@ -18,10 +16,6 @@ Row {
   signal chipHovered(int index)
 
   spacing: compact ? Style.space(6) : Style.space(4)
-
-  readonly property color selectedFill: Style.selectedFillFor(foreground, Commons.Color.accent, Commons.Color.urgent)
-  readonly property color hoverFill: Style.hoverFillFor(foreground, Commons.Color.accent, Commons.Color.urgent)
-  readonly property color idleBorder: Qt.rgba(foreground.r, foreground.g, foreground.b, 0.12)
 
   Repeater {
     model: root.chips
@@ -35,23 +29,21 @@ Row {
       width: label.implicitWidth + (root.compact ? Style.space(16) : Style.space(20))
       height: root.compact ? Style.space(24) : Style.space(28)
       radius: Style.cornerRadius
-      color: hasCursor ? root.hoverFill
-        : (isSelected ? root.selectedFill : "transparent")
+      color: hasCursor ? Theme.hoverFill : (isSelected ? Theme.selectedFill : "transparent")
       border.width: isSelected || hasCursor ? 0 : Style.spacing.hairline
-      border.color: root.idleBorder
+      border.color: Theme.line
 
       Text {
         id: label
         anchors.centerIn: parent
         text: modelData.label
-        color: isSelected || hasCursor ? root.foreground : Qt.darker(root.foreground, 1.5)
-        font.family: root.fontFamily
-        font.pixelSize: root.compact ? Style.font.caption : Style.font.body
+        color: isSelected || hasCursor ? Theme.fg : Theme.dim
+        font.family: Theme.fontFamily
+        font.pixelSize: root.compact ? Theme.caption : Theme.body
         font.bold: !root.compact && isSelected
       }
 
       MouseArea {
-        id: chipMouse
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
