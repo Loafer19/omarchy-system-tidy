@@ -45,7 +45,8 @@ Panel {
   property bool busy: false
   // Two-step confirm: the first Enter/click arms a row (by stable key), the
   // second runs it. Esc, moving the cursor, or 4 s of nothing disarms.
-  property string armedKey: ""
+  ConfirmController { id: confirmCtl; timeout: 4000 }
+  property alias armedKey: confirmCtl.armedKey
   // Footer status lives in the shared StatusFooter (progress / done / error).
   property alias statusText: footer.statusText
   property alias statusKind: footer.statusKind
@@ -229,21 +230,12 @@ Panel {
     return tab + ":" + (item.kind || "") + ":" + item.name
   }
 
-  function disarm() {
-    root.armedKey = ""
-    disarmTimer.stop()
-  }
+  function disarm() { confirmCtl.disarm() }
 
   // Returns true when the action should run now (row was already armed).
   function armOrConfirm(key) {
     if (root.busy || key === "") return false
-    if (root.armedKey === key) {
-      root.disarm()
-      return true
-    }
-    root.armedKey = key
-    disarmTimer.restart()
-    return false
+    return confirmCtl.confirm(key)
   }
 
   function moveCursor(dx, dy) {
@@ -638,7 +630,11 @@ Panel {
           }
           onChipHovered: function(index) { root.setFiltersCursor(index) }
 
-          delegate: Tidy.ActionListRow {
+          delegate: ActionRow {
+            actionStyle: "button"
+            controller: confirmCtl
+            disarmOnLeave: false
+            activateOnClick: false
             required property var modelData
             required property int index
             readonly property bool isPacnew: root.packagesFilter === "pacnew"
@@ -660,7 +656,7 @@ Panel {
             actionEnabled: !root.busy
             badge: isProtected ? "protected" : ""
             danger: true
-            armed: root.armedKey !== "" && root.armedKey === root.rowKey("packages", modelData)
+            confirmKey: root.rowKey("packages", modelData)
             armedText: root.confirmHint(isPacnew ? "Deletes it — merge first with sudo pacdiff"
               : isAgent ? "Uninstalls " + modelData.name + " (mise + stub)"
               : "pacman -Rns " + modelData.name + " after a snapshot")
@@ -690,7 +686,11 @@ Panel {
           }
           onChipHovered: function(index) { root.setFiltersCursor(index) }
 
-          delegate: Tidy.ActionListRow {
+          delegate: ActionRow {
+            actionStyle: "button"
+            controller: confirmCtl
+            disarmOnLeave: false
+            activateOnClick: false
             required property var modelData
             required property int index
             width: ListView.view.width
@@ -699,7 +699,7 @@ Panel {
             actionLabel: "Remove"
             actionEnabled: !root.busy
             danger: true
-            armed: root.armedKey !== "" && root.armedKey === root.rowKey("launchers", modelData)
+            confirmKey: root.rowKey("launchers", modelData)
             armedText: root.confirmHint("Deletes the launcher and its icon")
             onRowHovered: root.setRowCursor(index)
             onActionClicked: {
@@ -727,7 +727,11 @@ Panel {
           }
           onChipHovered: function(index) { root.setFiltersCursor(index) }
 
-          delegate: Tidy.ActionListRow {
+          delegate: ActionRow {
+            actionStyle: "button"
+            controller: confirmCtl
+            disarmOnLeave: false
+            activateOnClick: false
             required property var modelData
             required property int index
             width: ListView.view.width
@@ -743,8 +747,8 @@ Panel {
             actionEnabled: !root.busy
             danger: isEnabled
             badge: modelData.origin === "system" ? "system" : ""
-            badgeWarn: isEnabled && modelData.warning !== ""
-            armed: root.armedKey !== "" && root.armedKey === root.rowKey("startup", modelData)
+            badgeVariant: isEnabled && modelData.warning !== "" ? "warn" : "normal"
+            confirmKey: root.rowKey("startup", modelData)
             armedText: root.confirmHint(modelData.warning !== ""
               ? "Disabling: " + modelData.warning
               : modelData.kind === "systemd" ? "Stops it now and at login" : "Stops it from starting at login")
@@ -762,7 +766,11 @@ Panel {
           visible: root.activeTab === "cleanup"
           model: root.cleanupRows
 
-          delegate: Tidy.ActionListRow {
+          delegate: ActionRow {
+            actionStyle: "button"
+            controller: confirmCtl
+            disarmOnLeave: false
+            activateOnClick: false
             required property var modelData
             required property int index
             width: ListView.view.width
@@ -782,10 +790,10 @@ Panel {
             }
             actionLabel: "Clean"
             badge: modelData.irreversible ? "irreversible" : ""
-            badgeWarn: true
+            badgeVariant: "warn"
             actionEnabled: !root.busy && root.cleanupLoaded && (parseFloat(root.cleanupStatus[modelData.key]) || 0) > 0
             danger: true
-            armed: root.armedKey !== "" && root.armedKey === root.rowKey("cleanup", modelData)
+            confirmKey: root.rowKey("cleanup", modelData)
             armedText: root.confirmHint(modelData.warn || ("Deletes " + modelData.label.toLowerCase()))
             onRowHovered: root.setRowCursor(index)
             onActionClicked: {
@@ -975,9 +983,4 @@ Panel {
     }
   }
 
-  Timer {
-    id: disarmTimer
-    interval: 4000
-    onTriggered: root.armedKey = ""
-  }
 }
