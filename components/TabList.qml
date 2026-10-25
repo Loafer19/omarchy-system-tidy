@@ -13,6 +13,7 @@ Item {
   property var model: []
   property bool loading: false
   property string emptyText: ""
+  property string emptySubtitle: ""
   property alias delegate: list.delegate
   readonly property alias view: list
   readonly property int count: root.model ? root.model.length : 0
@@ -45,12 +46,12 @@ Item {
     model: root.model
   }
 
-  Text {
-    anchors.centerIn: list
+  EmptyState {
+    anchors.top: list.top
+    anchors.left: list.left
+    anchors.right: list.right
     visible: root.count === 0
-    text: root.loading ? "Loading…" : root.emptyText
-    color: Theme.dim
-    font.family: Theme.fontFamily
-    font.pixelSize: Theme.body
+    title: root.loading ? "Loading…" : root.emptyText
+    subtitle: root.loading ? "" : root.emptySubtitle
   }
 }

@@ -48,6 +48,22 @@ Panel {
   property string armedKey: ""
   property string statusText: ""
   property string statusKind: "progress" // "progress" | "done" | "error"
+  property bool cleanupLoading: false
+  property bool cleanupLoaded: false
+
+  readonly property real cleanupTotalMb: {
+    var s = root.cleanupStatus, keys = ["pacman", "coredump", "trash", "docker", "browser", "aur", "dev", "agents", "mise", "journal"], t = 0
+    for (var i = 0; i < keys.length; i++) t += parseFloat(s[keys[i]]) || 0
+    return t
+  }
+
+  readonly property var keyHints: {
+    if (root.armedKey !== "") return [["Enter", "confirm"], ["Esc", "cancel"]]
+    var h = [["Tab", "tabs"]]
+    if (root.activeFilterChips.length > 0) h.push(["h l", "filters"])
+    h.push(["j k", "rows"], ["Enter", "act"], ["Esc", "close"])
+    return h
+  }
 
   readonly property bool packagesViewLoading: {
     if (root.packagesFilter === "pacnew") return root.pacnewLoading
@@ -325,7 +341,7 @@ Panel {
     if (root.activeTab === "packages" && (root.packagesFilter === "extra" || root.packagesFilter === "orphans"))
       return !item.protected
     if (root.activeTab === "startup") return item.status === "enabled" || item.status === "disabled"
-    if (root.activeTab === "cleanup") return (parseFloat(root.cleanupStatus[item.key]) || 0) > 0
+    if (root.activeTab === "cleanup") return root.cleanupLoaded && (parseFloat(root.cleanupStatus[item.key]) || 0) > 0
     return true
   }
 
@@ -421,6 +437,7 @@ Panel {
   }
 
   function refreshCleanup() {
+    root.cleanupLoading = true
     cleanupProc.running = true
   }
 
@@ -583,30 +600,6 @@ Panel {
         }
 
         Rectangle { width: parent.width; height: Style.spacing.hairline; color: Theme.line }
-
-        Text {
-          id: statusLabel
-          visible: opacity > 0
-          leftPadding: Theme.edge
-          width: parent.width - Theme.edge
-          elide: Text.ElideRight
-          color: root.statusKind === "error" ? Theme.urgent
-            : root.statusKind === "done" ? Theme.accent
-            : Theme.fg
-          font.family: Theme.fontFamily
-          font.pixelSize: Theme.body
-          font.bold: true
-          opacity: root.statusText !== "" ? 1 : 0
-
-          Behavior on opacity { NumberAnimation { duration: 150 } }
-
-          Connections {
-            target: root
-            function onStatusTextChanged() {
-              if (root.statusText !== "") statusLabel.text = root.statusText
-            }
-          }
-        }
       }
 
       Item {
@@ -615,7 +608,8 @@ Panel {
         anchors.topMargin: Theme.edge
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.bottom: footer.top
+        anchors.bottomMargin: Theme.edge
 
         Tidy.TabList {
           id: packagesTab
@@ -634,6 +628,10 @@ Panel {
             : root.packagesFilter === "pacnew" ? "No .pacnew/.pacsave/.pacorig files found"
             : root.packagesFilter === "agents" ? "No agent CLIs installed"
             : "No packages beyond the Omarchy defaults"
+          emptySubtitle: root.packagesFilter === "orphans" ? "Nothing is left over from removed software"
+            : root.packagesFilter === "pacnew" ? "No config updates are waiting to be merged"
+            : root.packagesFilter === "agents" ? "Agent CLIs installed through mise show up here"
+            : "Everything explicitly installed is part of Omarchy"
           onChipSelected: function(key) {
             root.setPackagesFilter(key)
             root.setFiltersCursor(root.chipIndexByKey(root.packagesChips, key))
@@ -685,6 +683,7 @@ Panel {
           model: root.launchersItems
           loading: root.launchersViewLoading
           emptyText: root.launchersFilter === "tuis" ? "No TUI launchers found" : "No Web App launchers found"
+          emptySubtitle: root.launchersFilter === "tuis" ? "TUIs added with Install › TUI show up here" : "Web apps added with Install › Web App show up here"
           onChipSelected: function(key) {
             root.setLaunchersFilter(key)
             root.setFiltersCursor(root.chipIndexByKey(root.launchersChips, key))
@@ -721,6 +720,7 @@ Panel {
           model: root.startupItems
           loading: root.startupViewLoading
           emptyText: root.startupFilter === "services" ? "No user-added systemd services found" : "No autostart entries found"
+          emptySubtitle: root.startupFilter === "services" ? "Only units in ~/.config/systemd/user are listed" : ""
           onChipSelected: function(key) {
             root.setStartupFilter(key)
             root.setFiltersCursor(root.chipIndexByKey(root.startupChips, key))
@@ -769,6 +769,7 @@ Panel {
             hasCursor: root.rowHasCursor("cleanup", index)
             title: modelData.label
             subtitle: {
+              if (!root.cleanupLoaded) return "Measuring…"
               var size = Model.formatMib(root.cleanupStatus[modelData.key] || 0)
               var note = modelData.note
               if (modelData.key === "journal" && root.cleanupStatus.journalTotal > 0)
@@ -782,7 +783,7 @@ Panel {
             actionLabel: "Clean"
             badge: modelData.irreversible ? "irreversible" : ""
             badgeWarn: true
-            actionEnabled: !root.busy && (parseFloat(root.cleanupStatus[modelData.key]) || 0) > 0
+            actionEnabled: !root.busy && root.cleanupLoaded && (parseFloat(root.cleanupStatus[modelData.key]) || 0) > 0
             danger: true
             armed: root.armedKey !== "" && root.armedKey === root.rowKey("cleanup", modelData)
             armedText: root.confirmHint(modelData.warn || ("Deletes " + modelData.label.toLowerCase()))
@@ -794,7 +795,56 @@ Panel {
           }
         }
       }
-    }
+    
+
+      // Footer: status (progress / done / error) replaces the key hints while
+      // it is showing, so nothing above it moves.
+      Item {
+        id: footer
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: Style.space(18)
+
+        Tidy.KeyHints {
+          anchors.left: parent.left
+          anchors.leftMargin: Theme.edge
+          anchors.verticalCenter: parent.verticalCenter
+          visible: root.statusText === ""
+          hints: root.keyHints
+        }
+
+        Text {
+          anchors.left: parent.left
+          anchors.leftMargin: Theme.edge
+          anchors.right: totalLabel.visible ? totalLabel.left : parent.right
+          anchors.rightMargin: Theme.edge
+          anchors.verticalCenter: parent.verticalCenter
+          visible: root.statusText !== ""
+          elide: Text.ElideRight
+          textFormat: Text.PlainText
+          text: root.statusText
+          color: root.statusKind === "error" ? Theme.urgent
+            : root.statusKind === "done" ? Theme.accent
+            : Theme.fg
+          font.family: Theme.fontFamily
+          font.pixelSize: Theme.caption
+          font.bold: true
+        }
+
+        Text {
+          id: totalLabel
+          anchors.right: parent.right
+          anchors.rightMargin: Theme.edge
+          anchors.verticalCenter: parent.verticalCenter
+          visible: root.activeTab === "cleanup" && root.cleanupLoaded
+          text: "≈ " + Model.formatMib(root.cleanupTotalMb) + " reclaimable"
+          color: Theme.dim
+          font.family: Theme.fontFamily
+          font.pixelSize: Theme.caption
+        }
+      }
+}
   }
 
   Process {
@@ -924,7 +974,11 @@ Panel {
     command: ["bash", root.backendPath, "cleanup-status"]
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: root.cleanupStatus = Model.parseCleanupStatus(text)
+      onStreamFinished: {
+        root.cleanupStatus = Model.parseCleanupStatus(text)
+        root.cleanupLoading = false
+        root.cleanupLoaded = true
+      }
     }
   }
 
@@ -956,6 +1010,7 @@ Panel {
           root.statusText = "Failed"
           root.statusKind = "error"
         }
+        statusClearTimer.interval = root.statusKind === "error" ? 6000 : 2500
         statusClearTimer.restart()
       })
       root.refreshActiveTab()
