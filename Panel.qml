@@ -59,7 +59,8 @@ Panel {
   readonly property bool launchersViewLoading: root.launchersFilter === "tuis" ? root.tuisLoading : root.webappsLoading
   readonly property bool startupViewLoading: root.startupFilter === "services" ? root.systemdLoading : root.autostartLoading
 
-  // Largest reclaimable first.
+  // Fixed order (package caches, dev caches, apps, system logs, Trash) so a
+  // row never jumps under the cursor when sizes refresh.
   readonly property var cleanupRows: {
     var rows = [
       { key: "pacman", label: "Pacman cache", action: "clean", note: "Packages no longer installed", warn: "Deletes cached packages of uninstalled software (needs password)" },
@@ -73,10 +74,6 @@ Panel {
       { key: "journal", label: "Journal logs", action: "clean", note: "Keeps the latest 100 MiB", warn: "Vacuums the journal to 100 MiB (needs password)" },
       { key: "trash", label: "Trash", action: "clean", note: "Empties the Trash folder", warn: "Permanently empties the Trash", irreversible: true }
     ]
-    var status = root.cleanupStatus
-    rows.sort(function(a, b) {
-      return (parseFloat(status[b.key]) || 0) - (parseFloat(status[a.key]) || 0)
-    })
     return rows
   }
 
@@ -755,7 +752,7 @@ Panel {
               if (modelData.key === "pacman" && root.cleanupStatus.pacmanTotal > 0)
                 note += " · cache is " + Model.formatMib(root.cleanupStatus.pacmanTotal) + " in total"
               if (modelData.key === "agents" && root.cleanupStatus.agentsRunning)
-                note = "skips running: " + root.cleanupStatus.agentsRunning.split(" ").join(", ") + " · " + note
+                note = "skips running " + root.cleanupStatus.agentsRunning.split(" ").join(", ") + " · " + note
               return note !== "" ? size + " · " + note : size
             }
             actionLabel: "Clean"
