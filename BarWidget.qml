@@ -53,12 +53,47 @@ BarWidget {
     }
   }
 
+  // Legacy `omarchy shell yoyo.system-tidy toggle`. The bar is created once
+  // per monitor, and only one IpcHandler per target may exist, so only the
+  // instance on the first screen registers it ("Handler was registered but
+  // will not be used" otherwise), and it routes through the shell's bar so
+  // the panel opens on the focused monitor, like
+  // `omarchy shell shell toggle yoyo.system-tidy` does.
+  readonly property string hostScreenName: {
+    var w = button.QsWindow.window
+    return w && w.screen ? String(w.screen.name || "") : ""
+  }
+  readonly property bool isPrimaryInstance: {
+    var screens = Quickshell.screens
+    if (root.hostScreenName === "" || !screens || screens.length === 0) return true
+    return String(screens[0].name || "") === root.hostScreenName
+  }
+
+  function shellBar() {
+    var s = root.bar ? root.bar.shell : null
+    var b = s ? s.bar : null
+    return b && typeof b.summonBarWidget === "function" && typeof b.hideBarWidget === "function"
+      && typeof b.isBarWidgetOpen === "function" ? b : null
+  }
+
   IpcHandler {
     target: "yoyo.system-tidy"
+    enabled: root.isPrimaryInstance
 
-    function open(): void { root.open() }
-    function close(): void { root.close() }
-    function toggle(): void { root.toggle() }
+    function open(): void {
+      var b = root.shellBar()
+      if (!b || !b.summonBarWidget(root.moduleName)) root.open()
+    }
+    function close(): void {
+      var b = root.shellBar()
+      if (!b || !b.hideBarWidget(root.moduleName)) root.close()
+    }
+    function toggle(): void {
+      var b = root.shellBar()
+      if (!b) { root.toggle(); return }
+      var ok = b.isBarWidgetOpen(root.moduleName) ? b.hideBarWidget(root.moduleName) : b.summonBarWidget(root.moduleName)
+      if (!ok) root.toggle()
+    }
   }
 
   BarIconButton {
