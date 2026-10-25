@@ -26,6 +26,9 @@ Panel {
   property string launchersFilter: "webapps"
   property var packages: []
   property bool packagesLoading: false
+  // Orphans have their own list so a late reply can never land in Extra.
+  property var orphans: []
+  property bool orphansLoading: false
   property var pacnewFiles: []
   property bool pacnewLoading: false
   property var agents: []
@@ -49,11 +52,13 @@ Panel {
   readonly property bool packagesViewLoading: {
     if (root.packagesFilter === "pacnew") return root.pacnewLoading
     if (root.packagesFilter === "agents") return root.agentsLoading
+    if (root.packagesFilter === "orphans") return root.orphansLoading
     return root.packagesLoading
   }
   readonly property bool packagesViewEmpty: {
     if (root.packagesFilter === "pacnew") return root.pacnewFiles.length === 0
     if (root.packagesFilter === "agents") return root.agents.length === 0
+    if (root.packagesFilter === "orphans") return root.orphans.length === 0
     return root.packages.length === 0
   }
   readonly property bool launchersViewLoading: root.launchersFilter === "tuis" ? root.tuisLoading : root.webappsLoading
@@ -144,6 +149,7 @@ Panel {
     if (root.activeTab === "packages") {
       if (root.packagesFilter === "pacnew") return root.pacnewFiles
       if (root.packagesFilter === "agents") return root.agents
+      if (root.packagesFilter === "orphans") return root.orphans
       return root.packages
     }
     if (root.activeTab === "cleanup") return root.cleanupRows
@@ -391,6 +397,9 @@ Panel {
     } else if (root.packagesFilter === "agents") {
       root.agentsLoading = true
       agentsProc.running = true
+    } else if (root.packagesFilter === "orphans") {
+      root.orphansLoading = true
+      orphansProc.running = true
     } else {
       root.packagesLoading = true
       packagesProc.running = true
@@ -453,6 +462,9 @@ Panel {
     } else if (key === "agents") {
       root.agentsLoading = true
       agentsProc.running = true
+    } else if (root.packagesFilter === "orphans") {
+      root.orphansLoading = true
+      orphansProc.running = true
     } else {
       root.packagesLoading = true
       packagesProc.running = true
@@ -513,11 +525,20 @@ Panel {
     root.setTabsCursor(i)
   }
 
-  function requestPackagesLastUsed(rows) {
+  // pacman -Ql per package is slow; if a run is in flight, queue the new
+  // request and start it when the old one exits (no stale overwrite: the
+  // result is merged by name into whichever list it was asked for).
+  function requestPackagesLastUsed(rows, target) {
     if (!rows || rows.length === 0) return
     var names = []
     for (var i = 0; i < rows.length; i++) names.push(rows[i].name)
-    lastUsedProc.command = ["bash", root.backendPath, "packages-last-used"].concat(names)
+    var req = { target: target, command: ["bash", root.backendPath, "packages-last-used"].concat(names) }
+    if (lastUsedProc.running) {
+      lastUsedProc.pending = req
+      return
+    }
+    lastUsedProc.target = req.target
+    lastUsedProc.command = req.command
     lastUsedProc.running = true
   }
 
@@ -606,6 +627,7 @@ Panel {
           chipCursorIndex: chipCursorActive ? root.selectedIndex : -1
           model: root.packagesFilter === "pacnew" ? root.pacnewFiles
             : root.packagesFilter === "agents" ? root.agents
+            : root.packagesFilter === "orphans" ? root.orphans
             : root.packages
           loading: root.packagesViewLoading
           emptyText: root.packagesFilter === "orphans" ? "No orphaned packages"
@@ -775,24 +797,51 @@ Panel {
 
   Process {
     id: packagesProc
-    command: ["bash", root.backendPath, root.packagesFilter === "orphans" ? "packages-orphans" : "packages-list"]
+    command: ["bash", root.backendPath, "packages-list"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
         root.packages = Model.parsePackages(text)
         root.packagesLoading = false
-        root.requestPackagesLastUsed(root.packages)
+        root.requestPackagesLastUsed(root.packages, "extra")
+      }
+    }
+  }
+
+  Process {
+    id: orphansProc
+    command: ["bash", root.backendPath, "packages-orphans"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.orphans = Model.parsePackages(text)
+        root.orphansLoading = false
+        root.requestPackagesLastUsed(root.orphans, "orphans")
       }
     }
   }
 
   Process {
     id: lastUsedProc
+    property string target: "extra"
+    property var pending: null
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        root.packages = Model.withLastUsed(root.packages, Model.parseLastUsed(text))
+        var map = Model.parseLastUsed(text)
+        if (lastUsedProc.target === "orphans") root.orphans = Model.withLastUsed(root.orphans, map)
+        else root.packages = Model.withLastUsed(root.packages, map)
       }
+    }
+    onExited: {
+      var next = lastUsedProc.pending
+      if (!next) return
+      lastUsedProc.pending = null
+      Qt.callLater(function() {
+        lastUsedProc.target = next.target
+        lastUsedProc.command = next.command
+        lastUsedProc.running = true
+      })
     }
   }
 
