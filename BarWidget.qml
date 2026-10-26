@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import qs.Commons
 import qs.Ui
 
 // Bar chrome here; Panel.qml owns the floating content (same split as clock).
@@ -9,28 +8,34 @@ BarWidget {
   id: root
   moduleName: "yoyo.system-tidy"
 
-  readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
+  // Untyped handles: the loaded Panel, this button's window and the host bar
+  // are only known at runtime (qmllint sees them as plain QObject).
+  readonly property var panelItem: panelLoader.item
+  readonly property var hostWindow: button.QsWindow.window
+  readonly property var hostBar: root.bar
+
+  readonly property bool opened: root.panelItem ? root.panelItem.opened === true : false
 
   function open() {
-    if (panelLoader.item) panelLoader.item.open()
+    if (root.panelItem) root.panelItem.open()
   }
 
   function close() {
-    if (panelLoader.item) panelLoader.item.close()
+    if (root.panelItem) root.panelItem.close()
   }
 
   function toggle() {
-    if (panelLoader.item) panelLoader.item.toggle()
+    if (root.panelItem) root.panelItem.toggle()
   }
 
-  readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
+  readonly property bool popoutSwitchClosing: root.panelItem ? root.panelItem.popoutSwitchClosing === true : false
 
   function closeForPopoutSwitch() {
-    if (panelLoader.item) panelLoader.item.closeForPopoutSwitch()
+    if (root.panelItem) root.panelItem.closeForPopoutSwitch()
   }
 
   function injectPanel() {
-    var target = panelLoader.item
+    var target = root.panelItem
     if (!target) return
     if ("bar" in target) target.bar = root.bar
     if ("anchorItem" in target) target.anchorItem = button
@@ -60,7 +65,7 @@ BarWidget {
   // the panel opens on the focused monitor, like
   // `omarchy shell shell toggle yoyo.system-tidy` does.
   readonly property string hostScreenName: {
-    var w = button.QsWindow.window
+    var w = root.hostWindow
     return w && w.screen ? String(w.screen.name || "") : ""
   }
   readonly property bool isPrimaryInstance: {
@@ -70,7 +75,7 @@ BarWidget {
   }
 
   function shellBar() {
-    var s = root.bar ? root.bar.shell : null
+    var s = root.hostBar ? root.hostBar.shell : null
     var b = s ? s.bar : null
     return b && typeof b.summonBarWidget === "function" && typeof b.hideBarWidget === "function"
       && typeof b.isBarWidgetOpen === "function" ? b : null
