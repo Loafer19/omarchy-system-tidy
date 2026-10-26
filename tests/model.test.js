@@ -50,6 +50,8 @@ eq("parseAgents largest first", M.parseAgents("claude\tClaude Code\t10\tx\ncodex
 
 // --- formatting ------------------------------------------------------------
 eq("formatMib", [M.formatMib(0), M.formatMib("289"), M.formatMib(1951), M.formatMib("x")], ["0.0 MiB", "289.0 MiB", "1.91 GiB", "0 MiB"])
+eq("lastUserLine: last tagged line, tag stripped", M.lastUserLine("noise\ntidy: one\nmore\ntidy: two\n"), "two")
+eq("lastUserLine: nothing tagged", [M.lastUserLine("plain\n"), M.lastUserLine(""), M.lastUserLine(null)], ["", "", ""])
 eq("formatBytes", [M.formatBytes(5), M.formatBytes(5203), M.formatBytes(3 * 1048576), M.formatBytes("")], ["5 B", "5.1 KiB", "3.00 MiB", "0 B"])
 
 done()

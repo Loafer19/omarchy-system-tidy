@@ -122,3 +122,10 @@ function formatBytes(bytes) {
   if (n >= 1024) return (n / 1024).toFixed(1) + " KiB"
   return n.toFixed(0) + " B"
 }
+
+// Only lines the backend tags with "tidy: " are meant for the user; the last
+// one (without the tag) is shown after an action, "" if there is none.
+function lastUserLine(text) {
+  var lines = String(text || "").split("\n").filter(function(l) { return l.indexOf("tidy: ") === 0 })
+  return lines.length > 0 ? lines[lines.length - 1].slice(6) : ""
+}
