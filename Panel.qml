@@ -40,6 +40,10 @@ Panel {
   property string focusSection: "rows"
   property int selectedIndex: 0
 
+  // Panel size before fitting to the screen (same scale as Style.space).
+  readonly property int preferredWidth: Style.space(560)
+  readonly property int preferredHeight: Style.space(440)
+
   readonly property var tabs: Rows.TABS
   readonly property var activeFilterChips: Rows.chipsForTab(root.activeTab)
   readonly property var keyHints: Rows.keyHints(root.armedKey !== "", root.activeFilterChips.length > 0)
@@ -268,8 +272,8 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(560))
-    contentHeight: panel.fittedContentHeight(Style.space(440))
+    contentWidth: panel.fittedContentWidth(root.preferredWidth)
+    contentHeight: panel.fittedContentHeight(root.preferredHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -287,7 +291,7 @@ Panel {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        spacing: Style.space(8)
+        spacing: Theme.gap
 
         ChipRow {
           chips: root.tabs
@@ -301,7 +305,7 @@ Panel {
           onChipHovered: function(index) { root.setTabsCursor(index) }
         }
 
-        Rectangle { width: parent.width; height: Style.space(1); color: Theme.line }
+        PanelSeparator { foreground: Theme.fg }
       }
 
       Tidy.TabBody {
