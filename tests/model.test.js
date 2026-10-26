@@ -1,15 +1,7 @@
 // Sanity tests for Model.js outside QML:  node tests/model.test.js
-const fs = require("fs"), path = require("path"), vm = require("vm"), cp = require("child_process")
-const dir = path.join(__dirname, "..")
-const ctx = {}
-vm.createContext(ctx)
-vm.runInContext(fs.readFileSync(path.join(dir, "Model.js"), "utf8").replace(/^\.(pragma|import).*$/gm, ""), ctx)
-let pass = 0, fail = 0
-function eq(label, got, want) {
-  const g = JSON.stringify(got), w = JSON.stringify(want)
-  if (g === w) { pass++; console.log("PASS  " + label) } else { fail++; console.log("FAIL  " + label + "\n      got " + g + " want " + w) }
-}
-const M = ctx
+const fs = require("fs"), path = require("path"), cp = require("child_process")
+const { dir, load, eq, done } = require("./harness")
+const M = load("Model.js")
 
 // --- protected packages: UI list must equal the backend list -------------
 const backend = fs.readFileSync(path.join(dir, "scripts/backend.sh"), "utf8")
@@ -60,5 +52,4 @@ eq("parseAgents largest first", M.parseAgents("claude\tClaude Code\t10\tx\ncodex
 eq("formatMib", [M.formatMib(0), M.formatMib("289"), M.formatMib(1951), M.formatMib("x")], ["0.0 MiB", "289.0 MiB", "1.91 GiB", "0 MiB"])
 eq("formatBytes", [M.formatBytes(5), M.formatBytes(5203), M.formatBytes(3 * 1048576), M.formatBytes("")], ["5 B", "5.1 KiB", "3.00 MiB", "0 B"])
 
-console.log(`\n${pass} passed, ${fail} failed`)
-process.exit(fail ? 1 : 0)
+done()
