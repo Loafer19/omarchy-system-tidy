@@ -84,7 +84,7 @@ Panel {
       tabs: root.tabs,
       activeTab: root.activeTab,
       chips: root.activeFilterChips,
-      filterKey: root.filterKeyForTab(),
+      filterKey: root.filterFor(root.activeTab),
       itemCount: root.activeListItems.length
     }
   }
@@ -110,13 +110,6 @@ Panel {
   }
 
   function chipIndexByKey(chips, key) { return Nav.indexOfKey(chips, key) }
-
-  function filterKeyForTab() {
-    if (root.activeTab === "packages") return root.packagesFilter
-    if (root.activeTab === "startup") return root.startupFilter
-    if (root.activeTab === "launchers") return root.launchersFilter
-    return ""
-  }
 
   function moveCursor(dx, dy) {
     root.disarm()
@@ -212,38 +205,31 @@ Panel {
 
   // ------------------------------------------------------------ tabs & filters
 
+  function filterFor(tab) {
+    if (tab === "packages") return root.packagesFilter
+    if (tab === "startup") return root.startupFilter
+    if (tab === "launchers") return root.launchersFilter
+    return ""
+  }
+
+  // Switches the active tab's filter (tabs without chips have none). Only
+  // Packages loads per filter; the other tabs load both lists up front.
   function applyFilterKey(key) {
-    if (root.activeTab === "packages") root.setPackagesFilter(key)
-    else if (root.activeTab === "startup") root.setStartupFilter(key)
-    else if (root.activeTab === "launchers") root.setLaunchersFilter(key)
+    var tab = root.activeTab
+    if (Rows.chipsForTab(tab).length === 0) return
+    root.disarm()
+    if (root.filterFor(tab) === key) return
+    if (tab === "packages") root.packagesFilter = key
+    else if (tab === "startup") root.startupFilter = key
+    else root.launchersFilter = key
+    if (root.focusSection === "rows") root.selectedIndex = 0
+    if (tab === "packages") backendLists.refreshPackages(key)
   }
 
   // A chip click: switch the filter and put the cursor on that chip.
   function selectFilter(key) {
     root.applyFilterKey(key)
     root.setFiltersCursor(root.chipIndexByKey(root.activeFilterChips, key))
-  }
-
-  function setPackagesFilter(key) {
-    root.disarm()
-    if (root.packagesFilter === key) return
-    root.packagesFilter = key
-    if (root.focusSection === "rows") root.selectedIndex = 0
-    backendLists.refreshPackages(key)
-  }
-
-  function setStartupFilter(key) {
-    root.disarm()
-    if (root.startupFilter === key) return
-    root.startupFilter = key
-    if (root.focusSection === "rows") root.selectedIndex = 0
-  }
-
-  function setLaunchersFilter(key) {
-    root.disarm()
-    if (root.launchersFilter === key) return
-    root.launchersFilter = key
-    if (root.focusSection === "rows") root.selectedIndex = 0
   }
 
   function refreshActiveTab() {
