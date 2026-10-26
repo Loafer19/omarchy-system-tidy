@@ -215,5 +215,31 @@ exists "firefox profile dir kept" "$HOME/.cache/mozilla/firefox/abc.default/cach
 exists "chrome profile (cookies) never touched" "$HOME/.config/google-chrome/Default/Cookies"
 : > "$FX/running"
 
+# ---------------------------------------------------------------- error paths
+echo "== error paths"
+reset_calls; rc=0; err=$(B bogus-command 2>&1) || rc=$?
+expect "unknown command: rc 1, nothing run" "$rc:$(calls)" "1:"
+expect "unknown command named" "$err" "unknown command: bogus-command"
+reset_calls; expect "no command: rc 1" "$(rc_of B):$(calls)" "1:"
+for verb in packages-remove packages-pacnew-remove agents-remove webapps-remove tui-remove \
+  autostart-disable autostart-enable systemd-disable systemd-enable; do
+  reset_calls; expect "$verb without a target is a no-op" "$(rc_of B "$verb"):$(calls)" "0:"
+done
+reset_calls; expect "cleanup-run without a target fails, nothing run" "$(rc_of B cleanup-run | sed 's/[1-9][0-9]*/fail/'):$(calls)" "fail:"
+reset_calls; expect "unknown cleanup target refused" "$(rc_of B cleanup-run everything):$(calls)" "1:"
+reset_calls; expect "invalid package name refused" "$(rc_of B packages-remove 'a b'):$(calls)" "2:"
+reset_calls; expect "unknown agent id refused, mise untouched" "$(rc_of B agents-remove no-such-agent):$(calls)" "1:"
+
+mkdir -p "$TIDY_ROOT/etc/pacman.d" "$TIDY_ROOT/srv"
+: > "$TIDY_ROOT/etc/pacman.d/mirrorlist.pacnew"; : > "$TIDY_ROOT/etc/pacman.conf"; : > "$TIDY_ROOT/srv/x.pacnew"
+ln -s "$TIDY_ROOT/srv/x.pacnew" "$TIDY_ROOT/etc/link.pacnew"
+reset_calls; expect "pacnew outside /etc refused" "$(rc_of B packages-pacnew-remove "$TIDY_ROOT/srv/x.pacnew"):$(calls)" "1:"
+reset_calls; expect "pacnew symlink out of /etc refused" "$(rc_of B packages-pacnew-remove "$TIDY_ROOT/etc/link.pacnew"):$(calls)" "1:"
+reset_calls; expect "non-.pacnew file in /etc refused" "$(rc_of B packages-pacnew-remove "$TIDY_ROOT/etc/pacman.conf"):$(calls)" "1:"
+reset_calls; expect "missing pacnew refused" "$(rc_of B packages-pacnew-remove "$TIDY_ROOT/etc/nope.pacnew"):$(calls)" "1:"
+reset_calls; expect "dot-dot escape refused" "$(rc_of B packages-pacnew-remove "$TIDY_ROOT/etc/../srv/x.pacnew"):$(calls)" "1:"
+reset_calls; B packages-pacnew-remove "$TIDY_ROOT/etc/pacman.d/mirrorlist.pacnew"
+expect "nested /etc pacnew removed via pkexec rm" "$(calls)" "pkexec rm -f -- $TIDY_ROOT/etc/pacman.d/mirrorlist.pacnew"
+
 printf '\nRESULT  %d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]
