@@ -113,8 +113,6 @@ Panel {
     return false
   }
 
-  function chipIndexByKey(chips, key) { return Nav.indexOfKey(chips, key) }
-
   function moveCursor(dx, dy) {
     root.disarm()
     if (!root.ensureCursor()) return
@@ -125,7 +123,7 @@ Panel {
     var i = Nav.cycleIndex(root.tabs, root.activeTab, direction)
     if (i < 0) return
     root.activeTab = root.tabs[i].key
-    root.setTabsCursor(i)
+    root.setChipCursor("tabs", i)
   }
 
   function positionActiveList() {
@@ -142,15 +140,10 @@ Panel {
     root.selectedIndex = index
   }
 
-  function setTabsCursor(index) {
+  // Shows the cursor on a tab chip ("tabs") or filter chip ("filters").
+  function setChipCursor(section, index) {
     root.cursorActive = true
-    root.focusSection = "tabs"
-    root.selectedIndex = index
-  }
-
-  function setFiltersCursor(index) {
-    root.cursorActive = true
-    root.focusSection = "filters"
+    root.focusSection = section
     root.selectedIndex = index
   }
 
@@ -233,7 +226,7 @@ Panel {
   // A chip click: switch the filter and put the cursor on that chip.
   function selectFilter(key) {
     root.applyFilterKey(key)
-    root.setFiltersCursor(root.chipIndexByKey(root.activeFilterChips, key))
+    root.setChipCursor("filters", Nav.indexOfKey(root.activeFilterChips, key))
   }
 
   function refreshActiveTab() {
@@ -300,9 +293,9 @@ Panel {
           cursorIndex: root.cursorActive && root.focusSection === "tabs" ? root.selectedIndex : -1
           onSelected: function(key) {
             root.activeTab = key
-            root.setTabsCursor(root.chipIndexByKey(root.tabs, key))
+            root.setChipCursor("tabs", Nav.indexOfKey(root.tabs, key))
           }
-          onChipHovered: function(index) { root.setTabsCursor(index) }
+          onChipHovered: function(index) { root.setChipCursor("tabs", index) }
         }
 
         PanelSeparator { foreground: Theme.fg }
@@ -333,7 +326,7 @@ Panel {
           root.requestRowAction(item)
         }
         onChipSelected: function(key) { root.selectFilter(key) }
-        onChipHovered: function(index) { root.setFiltersCursor(index) }
+        onChipHovered: function(index) { root.setChipCursor("filters", index) }
       }
 
       // Footer: status (progress / done / error) replaces the key hints while
