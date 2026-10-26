@@ -307,7 +307,7 @@ Panel {
         anchors.topMargin: Theme.edge
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: footer.top
+        anchors.bottom: footerRule.top
         anchors.bottomMargin: Theme.edge
         lists: backendLists
         controller: confirmCtl
@@ -327,6 +327,15 @@ Panel {
         }
         onChipSelected: function(key) { root.selectFilter(key) }
         onChipHovered: function(index) { root.setChipCursor("filters", index) }
+      }
+
+      // A faint rule (as in Throttle) so a scrolled list ends cleanly.
+      PanelSeparator {
+        id: footerRule
+        anchors.bottom: footer.top
+        anchors.bottomMargin: Theme.edge
+        foreground: Theme.fg
+        strength: 0.08
       }
 
       // Footer: status (progress / done / error) replaces the key hints while
