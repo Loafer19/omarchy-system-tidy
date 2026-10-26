@@ -4,7 +4,9 @@
 # omarchy*) is a stub that only logs its argv, HOME is a temp dir and
 # TIDY_ROOT points the read-only system paths at a fixture tree.
 #   tests/backend.sh
-set -uo pipefail
+# Stub bodies below are single-quoted scripts; their $vars are theirs.
+# shellcheck disable=SC2016
+set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 backend=$here/../scripts/backend.sh
 tmp=$(mktemp -d /tmp/tidy-test.XXXXXX)
@@ -50,10 +52,12 @@ stub pgrep 'for n in $(cat "$FX/running" 2>/dev/null); do [ "${!#}" = "$n" ] && 
 stub sudo 'echo "sudo must never be called" >&2; exit 99'
 
 export PATH="$bin:/usr/bin:/bin"
-export HOME=$tmp/home TIDY_ROOT=$tmp/root XDG_DATA_HOME= XDG_CACHE_HOME=
+export HOME=$tmp/home TIDY_ROOT=$tmp/root XDG_DATA_HOME='' XDG_CACHE_HOME=
 mkdir -p "$HOME" "$TIDY_ROOT/usr/share/omarchy/install" "$TIDY_ROOT/var/log" "$TIDY_ROOT/etc"
 [[ "$(command -v pkexec)" = "$bin/pkexec" ]] || { echo "stubs not first on PATH, refusing to run" >&2; exit 2; }
 B() { bash "$backend" "$@"; }
+# rc_of CMD… — CMD's exit status (output dropped), without tripping set -e.
+rc_of() { local rc=0; "$@" >/dev/null 2>&1 || rc=$?; echo "$rc"; }
 calls() { cat "$CALLS"; }
 reset_calls() { : > "$CALLS"; }
 
@@ -74,12 +78,12 @@ expect "unknown date" "$(awk -F'\t' '$1=="cmake"{print $3}' <<<"$list")" "unknow
 expect "user apps not protected" "$(awk -F'\t' '$5==""{printf "%s ", $1}' <<<"$list")" "cmake linux-wifi-hotspot steam "
 for p in sudo omarchy amd-ucode linux mkinitcpio limine nvidia-dkms base; do
   reset_calls
-  err=$(B packages-remove cmake "$p" 2>&1); rc=$?
+  rc=0; err=$(B packages-remove cmake "$p" 2>&1) || rc=$?
   expect "remove refuses $p (rc 2, no pkexec)" "$rc:$(calls)" "2:"
 done
 expect_has "refusal says why" "$err" "protected system package"
-reset_calls; B packages-remove -- >/dev/null 2>&1; expect "option-like names refused" "$?:$(calls)" "2:"
-reset_calls; B packages-remove '-Rdd' >/dev/null 2>&1; expect "flag injection refused" "$?:$(calls)" "2:"
+reset_calls; expect "option-like names refused" "$(rc_of B packages-remove --):$(calls)" "2:"
+reset_calls; expect "flag injection refused" "$(rc_of B packages-remove '-Rdd'):$(calls)" "2:"
 reset_calls; B packages-remove steam cmake; expect_has "allowed remove goes through pkexec" "$(calls)" "pkexec env PATH="
 expect_has "pacman args end with -- names" "$(calls)" "pacman -Rns --noconfirm -- \"\$@\""
 
@@ -164,13 +168,13 @@ B autostart-enable steam
 expect "enable user entry keeps Exec, drops Hidden" "$(cat "$ua/steam.desktop")" "$(printf '[Desktop Entry]\nExec=steam -silent')"
 B autostart-disable steam
 expect "disable user entry appends Hidden" "$(tail -1 "$ua/steam.desktop")" "Hidden=true"
-err=$(B autostart-disable mine 2>&1); rc=$?
+rc=0; err=$(B autostart-disable mine 2>&1) || rc=$?
 expect "symlinked entry refused" "$rc" "3"
 expect_has "symlink message" "$err" "symlink"
 expect "symlink target untouched" "$(cat "$HOME/real-mine.desktop")" "$(printf '[Desktop Entry]\nExec=mine')"
 B autostart-disable ../escape; gone "path in name is stripped to basename" "$HOME/.config/escape.desktop"
 rm -f "$ua/escape.desktop"
-for bad in .. .hidden -x; do B autostart-disable "$bad" >/dev/null 2>&1; expect "bad autostart name '$bad' refused" "$?" "2"; done
+for bad in .. .hidden -x; do expect "bad autostart name '$bad' refused" "$(rc_of B autostart-disable "$bad")" "2"; done
 
 printf 'fluxd.service enabled enabled\nold.timer disabled enabled\nvendor.service enabled enabled\n' > "$FX/systemctl.--user.list-unit-files"
 cat > "$bin/systemctl" <<'S'
@@ -187,8 +191,8 @@ chmod +x "$bin/systemctl"
 expect "systemd list: user units incl. disabled, no vendor" "$(B systemd-list | cut -f1,2 | tr '\t\n' ': ')" "fluxd.service:enabled old.timer:disabled "
 reset_calls; B systemd-disable fluxd.service; expect_has "disable --now --" "$(calls)" "systemctl --user disable --now -- fluxd.service"
 reset_calls; B systemd-enable old.timer; expect_has "enable --now --" "$(calls)" "systemctl --user enable --now -- old.timer"
-reset_calls; B systemd-disable vendor.service >/dev/null 2>&1; expect "vendor unit refused" "$?:$(calls | grep -c disable)" "2:0"
-reset_calls; B systemd-disable --global >/dev/null 2>&1; expect "option-like unit refused" "$?:$(calls)" "2:"
+reset_calls; expect "vendor unit refused" "$(rc_of B systemd-disable vendor.service):$(calls | grep -c disable || true)" "2:0"
+reset_calls; expect "option-like unit refused" "$(rc_of B systemd-disable --global):$(calls)" "2:"
 
 
 echo "== journal / browser"

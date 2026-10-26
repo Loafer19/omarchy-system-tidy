@@ -102,6 +102,7 @@ packages_remove() {
     fi
   done
   # omarchy-snapshot (multi-config); snapper fallback. Failure must not block remove.
+  # shellcheck disable=SC2016 # $1/$@ expand in the root shell, on purpose
   pkexec env PATH="/usr/share/omarchy/bin:/usr/bin:/bin:$PATH" \
     OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}" \
     bash -c '
@@ -169,8 +170,8 @@ tui_remove() {
 valid_entry_name() {
   case "$1" in
     "" | .* | -* | *..* | */* | *$'\n'*) return 1 ;;
+    *) return 0 ;;
   esac
-  return 0
 }
 
 desktop_hidden() {
@@ -315,6 +316,7 @@ safe_clear_dir() {
 # safe_clear_dir as root (expand inside pkexec, not the user shell).
 pkexec_safe_clear_dir() {
   local d="$1"
+  # shellcheck disable=SC2016 # $1 expands in the root shell, on purpose
   pkexec bash -c '
     d=$1
     [ -L "$d" ] && exit 0
@@ -507,8 +509,8 @@ agents_list() {
 agents_remove() {
   [[ "$#" -eq 0 ]] && exit 0
   local id="$1" pkg stub matched=0
-  local aid aname apkg astub ainstall
-  while IFS='|' read -r aid aname apkg astub ainstall; do
+  local aid apkg astub
+  while IFS='|' read -r aid _ apkg astub _; do
     if [[ "$aid" = "$id" ]]; then
       pkg=$apkg; stub=$astub; matched=1
       break
@@ -559,8 +561,8 @@ EOF
 agent_path_is_precious() {
   case "${1##*/}" in
     memor* | goal* | *.sqlite* | auth* | config* | settings* | credentials* | projects | sessions | history*) return 0 ;;
+    *) return 1 ;;
   esac
-  return 1
 }
 
 agent_running() {
@@ -569,12 +571,12 @@ agent_running() {
 }
 
 agents_running_list() {
-  local seen="" agent proc _path
+  local running="" agent proc _path
   while IFS='|' read -r agent proc _path; do
-    [[ " $seen " == *" $agent "* ]] && continue
-    agent_running "$proc" && seen="$seen $agent"
+    [[ " $running " == *" $agent "* ]] && continue
+    agent_running "$proc" && running="$running $agent"
   done < <(agents_cache_paths)
-  echo "${seen# }"
+  echo "${running# }"
 }
 
 agents_cache_mb() {

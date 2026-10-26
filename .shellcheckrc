@@ -1,0 +1,11 @@
+# shellcheck config for scripts/, tests/ and tools/ (shellcheck >= 0.10).
+# Every optional check is on, minus three that fight the style on purpose:
+enable=all
+# SC2250: braces around every variable ("${x}" for "$x") is style only.
+disable=SC2250
+# SC2310: the is_*/valid_* predicates exist to be used in if / && / ||.
+disable=SC2310
+# SC2312: $(…) inside printf/[[ ]]/process substitution is a best-effort
+# read (cleanup-status must print a line even when one probe fails); the
+# tests compare that output instead of the exit status.
+disable=SC2312
