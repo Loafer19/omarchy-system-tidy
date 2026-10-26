@@ -15,8 +15,8 @@ no() { printf 'FAIL  %s\n      %s\n' "$1" "${2:-}"; fail=$((fail + 1)); }
 expect() { if [[ $2 == "$3" ]]; then ok "$1"; else no "$1" "got: $2 | want: $3"; fi; }
 expect_has() { if [[ $2 == *"$3"* ]]; then ok "$1"; else no "$1" "missing: $3 in: $2"; fi; }
 expect_lacks() { if [[ $2 != *"$3"* ]]; then ok "$1"; else no "$1" "unexpected: $3"; fi; }
-exists() { if [ -e "$2" ]; then ok "$1"; else no "$1" "gone: $2"; fi; }
-gone() { if [ ! -e "$2" ]; then ok "$1"; else no "$1" "still there: $2"; fi; }
+exists() { if [[ -e "$2" ]]; then ok "$1"; else no "$1" "gone: $2"; fi; }
+gone() { if [[ ! -e "$2" ]]; then ok "$1"; else no "$1" "still there: $2"; fi; }
 
 bin=$tmp/bin; mkdir -p "$bin"
 export CALLS=$tmp/calls.log FX=$tmp/fx
@@ -52,7 +52,7 @@ stub sudo 'echo "sudo must never be called" >&2; exit 99'
 export PATH="$bin:/usr/bin:/bin"
 export HOME=$tmp/home TIDY_ROOT=$tmp/root XDG_DATA_HOME= XDG_CACHE_HOME=
 mkdir -p "$HOME" "$TIDY_ROOT/usr/share/omarchy/install" "$TIDY_ROOT/var/log" "$TIDY_ROOT/etc"
-[ "$(command -v pkexec)" = "$bin/pkexec" ] || { echo "stubs not first on PATH, refusing to run" >&2; exit 2; }
+[[ "$(command -v pkexec)" = "$bin/pkexec" ]] || { echo "stubs not first on PATH, refusing to run" >&2; exit 2; }
 B() { bash "$backend" "$@"; }
 calls() { cat "$CALLS"; }
 reset_calls() { : > "$CALLS"; }
@@ -212,4 +212,4 @@ exists "chrome profile (cookies) never touched" "$HOME/.config/google-chrome/Def
 : > "$FX/running"
 
 printf '\nRESULT  %d passed, %d failed\n' "$pass" "$fail"
-[ "$fail" -eq 0 ]
+[[ "$fail" -eq 0 ]]

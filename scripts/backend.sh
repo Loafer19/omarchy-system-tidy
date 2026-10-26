@@ -29,15 +29,15 @@ package_last_used() {
   local pkg="$1"
   local newest=0 atime f
   while IFS= read -r f; do
-    [ -f "$f" ] || continue
+    [[ -f "$f" ]] || continue
     atime=$(stat -c %X "$f" 2>/dev/null || echo 0)
-    [ "$atime" -gt "$newest" ] && newest=$atime
+    [[ "$atime" -gt "$newest" ]] && newest=$atime
   done < <(pacman -Ql "$pkg" 2>/dev/null | awk '{print $2}' | grep -E '/s?bin/' || true)
 
-  [ "$newest" -eq 0 ] && { echo "n/a"; return; }
+  [[ "$newest" -eq 0 ]] && { echo "n/a"; return; }
 
   local days=$(( ($(date +%s) - newest) / 86400 ))
-  [ "$days" -le 0 ] && echo "today" || echo "${days}d ago"
+  [[ "$days" -le 0 ]] && echo "today" || echo "${days}d ago"
 }
 
 # last-used filled later via packages-last-used (pacman -Ql is slow).
@@ -47,9 +47,9 @@ describe_packages() {
   local -a pkgs=()
   local pkg
   while read -r pkg; do
-    [ -n "$pkg" ] && pkgs+=("$pkg")
+    [[ -n "$pkg" ]] && pkgs+=("$pkg")
   done
-  [ "${#pkgs[@]}" -eq 0 ] && return 0
+  [[ "${#pkgs[@]}" -eq 0 ]] && return 0
   local sizes dates
   sizes=$(expac -H M '%n\t%m' "${pkgs[@]}" 2>/dev/null || true)
   dates=$(printf '%s\n' "${pkgs[@]}" | awk '
@@ -82,14 +82,14 @@ packages_orphans() {
 packages_last_used() {
   local pkg
   for pkg in "$@"; do
-    [ -z "$pkg" ] && continue
+    [[ -z "$pkg" ]] && continue
     printf '%s\t%s\n' "$pkg" "$(package_last_used "$pkg")"
   done
   return 0
 }
 
 packages_remove() {
-  [ "$#" -eq 0 ] && exit 0
+  [[ "$#" -eq 0 ]] && exit 0
   local pkg
   for pkg in "$@"; do
     if ! valid_pkg_name "$pkg"; then
@@ -118,14 +118,14 @@ packages_remove() {
 # Listing is unprivileged; remove needs root (/etc).
 packages_pacnew() {
   (find "$ROOT/etc" -xdev \( -name "*.pacnew" -o -name "*.pacsave" -o -name "*.pacorig" \) 2>/dev/null || true) | sort | while read -r f; do
-    [ -f "$f" ] || continue
+    [[ -f "$f" ]] || continue
     printf '%s\t%s\t%s\n' "$(basename "$f")" "$(stat -c%s "$f" 2>/dev/null || echo 0)" "$f"
   done
   return 0
 }
 
 packages_pacnew_remove() {
-  [ "$#" -eq 0 ] && exit 0
+  [[ "$#" -eq 0 ]] && exit 0
   # realpath + /etc + .pacnew|.pacsave|.pacorig (including nested under /etc).
   local resolved
   resolved=$(realpath -e -- "$1" 2>/dev/null) || exit 1
@@ -146,7 +146,7 @@ webapps_list() {
 }
 
 webapps_remove() {
-  [ "$#" -eq 0 ] && exit 0
+  [[ "$#" -eq 0 ]] && exit 0
   omarchy webapp remove "$1"
 }
 
@@ -154,14 +154,14 @@ webapps_remove() {
 tui_list() {
   local f
   for f in "$HOME/.local/share/applications/"*.desktop; do
-    [ -f "$f" ] || continue
+    [[ -f "$f" ]] || continue
     grep -q 'Exec=xdg-terminal-exec --app-id=TUI\.' "$f" 2>/dev/null || continue
     basename "$f" .desktop
   done | sort
 }
 
 tui_remove() {
-  [ "$#" -eq 0 ] && exit 0
+  [[ "$#" -eq 0 ]] && exit 0
   # Avoid `omarchy tui remove`: "all" is mass-delete.
   omarchy-tui-remove "$1"
 }
@@ -184,15 +184,15 @@ autostart_list() {
   declare -A seen
   local d f name status origin
   for d in "$user_dir" "$sys_dir"; do
-    [ -d "$d" ] || continue
+    [[ -d "$d" ]] || continue
     for f in "$d"/*.desktop; do
-      [ -f "$f" ] || continue
+      [[ -f "$f" ]] || continue
       name=$(basename "$f" .desktop)
-      [ -n "${seen[$name]:-}" ] && continue
+      [[ -n "${seen[$name]:-}" ]] && continue
       seen[$name]=1
       if desktop_hidden "$f"; then status="disabled"; else status="enabled"; fi
       origin="user"
-      [ -f "$sys_dir/$name.desktop" ] && origin="system"
+      [[ -f "$sys_dir/$name.desktop" ]] && origin="system"
       printf '%s\t%s\t%s\t%s\n' "$name" "$status" "$d" "$origin"
     done
   done
@@ -208,19 +208,19 @@ autostart_name_arg() {
 }
 
 autostart_disable() {
-  [ "$#" -eq 0 ] && exit 0
+  [[ "$#" -eq 0 ]] && exit 0
   local name dir target tmp
   name=$(autostart_name_arg "$1") || exit 2
   dir="$HOME/.config/autostart"
   target="$dir/$name.desktop"
-  if [ -L "$target" ]; then
+  if [[ -L "$target" ]]; then
     echo "refusing: $target is a symlink (managed elsewhere) — edit it there" >&2
     exit 3
   fi
   mkdir -p "$dir"
   # temp + rename so we never follow a symlink at $target.
   tmp=$(mktemp "$dir/.tidy-tmp.XXXXXX") || exit 1
-  if [ -f "$target" ]; then
+  if [[ -f "$target" ]]; then
     if grep -qiE '^[[:space:]]*Hidden[[:space:]]*=' "$target"; then
       sed -E 's/^[[:space:]]*[Hh][Ii][Dd][Dd][Ee][Nn][[:space:]]*=.*/Hidden=true/' "$target" > "$tmp"
     else
@@ -234,18 +234,18 @@ autostart_disable() {
 }
 
 autostart_enable() {
-  [ "$#" -eq 0 ] && exit 0
+  [[ "$#" -eq 0 ]] && exit 0
   local name dir target tmp
   name=$(autostart_name_arg "$1") || exit 2
   dir="$HOME/.config/autostart"
   target="$dir/$name.desktop"
-  if [ -L "$target" ]; then
+  if [[ -L "$target" ]]; then
     echo "refusing: $target is a symlink (managed elsewhere) — edit it there" >&2
     exit 3
   fi
-  [ -f "$target" ] || exit 0   # vendor entry with no override is already enabled
+  [[ -f "$target" ]] || exit 0   # vendor entry with no override is already enabled
   # Our own override stub (no Exec=) over a vendor entry: just drop it.
-  if ! grep -qE '^[[:space:]]*Exec[[:space:]]*=' "$target" && [ -f "$ROOT/etc/xdg/autostart/$name.desktop" ]; then
+  if ! grep -qE '^[[:space:]]*Exec[[:space:]]*=' "$target" && [[ -f "$ROOT/etc/xdg/autostart/$name.desktop" ]]; then
     rm -f -- "$target"
     return 0
   fi
@@ -267,7 +267,7 @@ systemd_user_list() {
   command -v systemctl >/dev/null 2>&1 || return 0
   local unit state path
   while read -r unit state _; do
-    [ -z "$unit" ] && continue
+    [[ -z "$unit" ]] && continue
     valid_unit_name "$unit" || continue
     path=$(user_unit_path "$unit")
     case "$path" in
@@ -288,13 +288,13 @@ systemd_user_guard() {
 }
 
 systemd_user_disable() {
-  [ "$#" -eq 0 ] && exit 0
+  [[ "$#" -eq 0 ]] && exit 0
   systemd_user_guard "$1"
   systemctl --user disable --now -- "$1"
 }
 
 systemd_user_enable() {
-  [ "$#" -eq 0 ] && exit 0
+  [[ "$#" -eq 0 ]] && exit 0
   systemd_user_guard "$1"
   systemctl --user enable --now -- "$1"
 }
@@ -306,8 +306,8 @@ dir_size_mb() {
 # Refuse symlinked dirs; find clears children including dotfiles.
 safe_clear_dir() {
   local d="$1"
-  [ -L "$d" ] && return 0
-  [ -d "$d" ] || return 0
+  [[ -L "$d" ]] && return 0
+  [[ -d "$d" ]] || return 0
   find "$d" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + 2>/dev/null || true
   return 0
 }
@@ -379,7 +379,7 @@ browser_cache_dirs() {
   printf '%s\n' "chrome|$cache/google-chrome" "chromium|$cache/chromium" \
     "brave|$cache/BraveSoftware" "vivaldi-bin|$cache/vivaldi"
   for d in "$cache"/mozilla/firefox/*/cache2; do
-    [ -d "$d" ] && printf 'firefox|%s\n' "$d"
+    [[ -d "$d" ]] && printf 'firefox|%s\n' "$d"
   done
   return 0
 }
@@ -396,7 +396,7 @@ browser_cache_mb() {
 browser_cache_clean() {
   local proc d skipped=""
   while IFS='|' read -r proc d; do
-    [ -d "$d" ] || continue
+    [[ -d "$d" ]] || continue
     if pgrep -x "$proc" >/dev/null 2>&1; then
       [[ " $skipped " == *" $proc "* ]] || skipped="$skipped $proc"
       continue
@@ -404,7 +404,7 @@ browser_cache_clean() {
     safe_clear_dir "$d"
   done < <(browser_cache_dirs)
   skipped="${skipped# }"
-  [ -n "$skipped" ] && echo "tidy: skipped running ${skipped// /, }"
+  [[ -n "$skipped" ]] && echo "tidy: skipped running ${skipped// /, }"
   return 0
 }
 
@@ -476,8 +476,8 @@ agent_install_path() {
     c=${c//\//-}
     c=${c//@/}
     c=${c//:/-}
-    [ -n "$c" ] || continue
-    [ -d "$installs/$c" ] && { echo "$installs/$c"; return 0; }
+    [[ -n "$c" ]] || continue
+    [[ -d "$installs/$c" ]] && { echo "$installs/$c"; return 0; }
   done
   return 1
 }
@@ -485,15 +485,15 @@ agent_install_path() {
 agents_list() {
   local id name pkg stub install_dir size detail has_stub path
   while IFS='|' read -r id name pkg stub install_dir; do
-    [ -z "$id" ] && continue
+    [[ -z "$id" ]] && continue
     has_stub=0
     path=""
-    [ -e "$HOME/.local/bin/$stub" ] && has_stub=1
+    [[ -e "$HOME/.local/bin/$stub" ]] && has_stub=1
     path=$(agent_install_path "$install_dir" "$pkg" || true)
-    [ "$has_stub" -eq 0 ] && [ -z "$path" ] && continue
+    [[ "$has_stub" -eq 0 ]] && [[ -z "$path" ]] && continue
 
     size=0
-    if [ -n "$path" ]; then
+    if [[ -n "$path" ]]; then
       size=$(dir_size_mb "$path")
       detail="mise"
     else
@@ -505,16 +505,16 @@ agents_list() {
 }
 
 agents_remove() {
-  [ "$#" -eq 0 ] && exit 0
+  [[ "$#" -eq 0 ]] && exit 0
   local id="$1" pkg stub matched=0
   local aid aname apkg astub ainstall
   while IFS='|' read -r aid aname apkg astub ainstall; do
-    if [ "$aid" = "$id" ]; then
+    if [[ "$aid" = "$id" ]]; then
       pkg=$apkg; stub=$astub; matched=1
       break
     fi
   done < <(agent_catalog)
-  [ "$matched" -eq 1 ] || exit 1
+  [[ "$matched" -eq 1 ]] || exit 1
 
   if command -v mise >/dev/null 2>&1; then
     mise unuse -g -y "$pkg" >/dev/null 2>&1 || true
@@ -523,7 +523,7 @@ agents_remove() {
   rm -f "$HOME/.local/bin/$stub"
 
   local def="$HOME/.config/omarchy/defaults/agent"
-  if [ -f "$def" ] && [ "$(tr -d '[:space:]' < "$def")" = "$id" ]; then
+  if [[ -f "$def" ]] && [[ "$(tr -d '[:space:]' < "$def")" = "$id" ]]; then
     rm -f "$def"
   fi
 }
@@ -580,7 +580,7 @@ agents_running_list() {
 agents_cache_mb() {
   local total=0 size agent proc path
   while IFS='|' read -r agent proc path; do
-    [ -n "$path" ] && [ -d "$path" ] && [ ! -L "$path" ] || continue
+    [[ -n "$path" ]] && [[ -d "$path" ]] && [[ ! -L "$path" ]] || continue
     agent_path_is_precious "$path" && continue
     size=$(dir_size_mb "$path")
     total=$((total + ${size:-0}))
@@ -591,20 +591,20 @@ agents_cache_mb() {
 agents_cache_clean() {
   local agent proc path skipped=""
   while IFS='|' read -r agent proc path; do
-    [ -n "$path" ] || continue
+    [[ -n "$path" ]] || continue
     [[ " $skipped " == *" $agent "* ]] && continue
     if agent_running "$proc"; then
       skipped="$skipped $agent"
       continue
     fi
-    [ -L "$path" ] && continue
+    [[ -L "$path" ]] && continue
     agent_path_is_precious "$path" && continue
-    [ -d "$path" ] || continue
+    [[ -d "$path" ]] || continue
     find "$path" -mindepth 1 -maxdepth 1 ! -name 'memor*' ! -name 'goal*' ! -name '*.sqlite*' \
       ! -name 'auth*' ! -name 'config*' -exec rm -rf -- {} + 2>/dev/null || true
   done < <(agents_cache_paths)
   skipped="${skipped# }"
-  [ -n "$skipped" ] && echo "tidy: skipped running ${skipped// /, }"
+  [[ -n "$skipped" ]] && echo "tidy: skipped running ${skipped// /, }"
   return 0
 }
 
@@ -616,10 +616,10 @@ mise_unused_mb() {
   total=$((total + ${size:-0}))
 
   while read -r tool ver _; do
-    [ -z "${tool:-}" ] || [ -z "${ver:-}" ] && continue
+    [[ -z "${tool:-}" ]] || [[ -z "${ver:-}" ]] && continue
     [[ "$tool" == "#"* ]] && continue
     path=$(mise where "${tool}@${ver}" 2>/dev/null || true)
-    [ -n "$path" ] || continue
+    [[ -n "$path" ]] || continue
     size=$(dir_size_mb "$path")
     total=$((total + ${size:-0}))
   done < <(mise ls --prunable --installed --no-header 2>/dev/null || true)
@@ -658,7 +658,7 @@ dev_cache_clean() {
   safe_clear_dir "$HOME/.npm"
   safe_clear_dir "$HOME/.cargo/registry"
   # Go module cache is often read-only.
-  if [ -d "$HOME/go/pkg/mod" ] && [ ! -L "$HOME/go/pkg/mod" ]; then
+  if [[ -d "$HOME/go/pkg/mod" ]] && [[ ! -L "$HOME/go/pkg/mod" ]]; then
     chmod -R u+w "$HOME/go/pkg/mod" 2>/dev/null || true
   fi
   safe_clear_dir "$HOME/go/pkg/mod"
