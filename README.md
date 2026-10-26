@@ -92,7 +92,18 @@ skipped with a note if not installed), the pure-JS tests for `Model.js`,
 
 The backend tests run against stubbed `pacman`, `expac`, `pkexec`,
 `paccache`, `systemctl`, `docker`, `mise` and `journalctl` in a temporary
-`HOME`; they never touch the real system.
+`HOME`; they never touch the real system. CI (`.github/workflows/ci.yml`)
+runs the same `tests/run.sh` on Ubuntu for every push and pull request.
+
+Previews (`preview.png`) are rendered offscreen, never from a real session:
+
+```bash
+tools/render-previews.sh          # needs qs and the Omarchy shell
+```
+
+It runs the real panel in Quickshell (`QT_QPA_PLATFORM=offscreen`) against
+`tests/preview/backend.sh`, a read-only fake backend with made-up packages and
+sizes, so no data from your machine ends up in the image.
 
 ## Shared UI
 
