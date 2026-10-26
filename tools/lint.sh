@@ -9,7 +9,10 @@ cd "$(dirname "$0")/.."
 status=0
 shellcheck_bin=${SHELLCHECK:-$(command -v shellcheck || true)}
 if [[ -n "$shellcheck_bin" ]]; then
-  "$shellcheck_bin" scripts/*.sh tests/*.sh tools/*.sh || status=1
+  # tools/sync-ui.sh is omarchy-yoyo-ui's own script, copied verbatim and
+  # linted there; the rest is ours.
+  mapfile -t own < <(printf '%s\n' scripts/*.sh tests/*.sh tests/preview/*.sh tools/*.sh | grep -vx tools/sync-ui.sh)
+  "$shellcheck_bin" "${own[@]}" || status=1
 else
   echo "lint: shellcheck not found, skipped" >&2
 fi

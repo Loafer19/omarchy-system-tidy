@@ -31,7 +31,7 @@ cp "$root/tests/preview/shell.qml" "$cfg/shell.qml"
 render() { # render FILE TAB
   local file=$out/$1 log=$tmp/$1.log
   PREVIEW_TAB=$2 PREVIEW_OUT=$file QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
-    QT_SCALE_FACTOR=${PREVIEW_SCALE:-2} timeout 40 qs -p "$cfg" > "$log" 2>&1 || true
+    QT_SCALE_FACTOR="${PREVIEW_SCALE:-2}" timeout 40 qs -p "$cfg" > "$log" 2>&1 || true
   if grep -q '^.*saved ' "$log" && [[ -s $file ]]; then
     echo "saved $file"
   else
