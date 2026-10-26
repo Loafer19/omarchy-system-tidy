@@ -1,8 +1,11 @@
 singleton Theme Theme.qml
 ActionRow ActionRow.qml
+CaptionText CaptionText.qml
 ChipRow ChipRow.qml
 ConfirmController ConfirmController.qml
 EmptyState EmptyState.qml
 HeaderChip HeaderChip.qml
 KeyHints KeyHints.qml
+RowHover RowHover.qml
 StatusFooter StatusFooter.qml
+TitleText TitleText.qml

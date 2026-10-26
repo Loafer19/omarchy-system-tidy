@@ -41,7 +41,7 @@ Panel {
   property int selectedIndex: 0
 
   // Panel size before fitting to the screen (same scale as Style.space).
-  readonly property int preferredWidth: Style.space(560)
+  readonly property int preferredWidth: Theme.panelWide
   readonly property int preferredHeight: Style.space(440)
 
   readonly property var tabs: Rows.TABS
@@ -307,8 +307,9 @@ Panel {
         anchors.topMargin: Theme.edge
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: footerRule.top
-        anchors.bottomMargin: Theme.edge
+        // Clear of the footer's rule: its gap, the hairline, then an edge.
+        anchors.bottom: footer.top
+        anchors.bottomMargin: footer.separatorGap + Theme.hairline + Theme.edge
         lists: backendLists
         controller: confirmCtl
         activeTab: root.activeTab
@@ -329,22 +330,15 @@ Panel {
         onChipHovered: function(index) { root.setChipCursor("filters", index) }
       }
 
-      // A faint rule (as in Throttle) so a scrolled list ends cleanly.
-      PanelSeparator {
-        id: footerRule
-        anchors.bottom: footer.top
-        anchors.bottomMargin: Theme.edge
-        foreground: Theme.fg
-        strength: 0.08
-      }
-
       // Footer: status (progress / done / error) replaces the key hints while
-      // it is showing, so nothing above it moves.
+      // it is showing, so nothing above it moves. Its faint rule (as in
+      // Throttle) lets a scrolled list end cleanly.
       StatusFooter {
         id: footer
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+        separator: true
         hints: root.keyHints
         rightText: root.activeTab === "cleanup" && backendLists.cleanupLoaded
           ? "≈ " + Model.formatMib(Rows.cleanupTotalMb(backendLists.cleanupStatus)) + " reclaimable" : ""

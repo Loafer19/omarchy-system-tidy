@@ -6,6 +6,9 @@ import qs.Commons
 // Either bind statusText / statusKind yourself, or call flash(text, kind):
 // errors clear after errorMs, "done"/"" after doneMs, "progress" stays until
 // the next flash() or clear().
+// separator: true draws a faint rule (Theme.separator) separatorGap above the
+// footer, the "list ends here" line Throttle and System Tidy use. The rule sits
+// outside the footer's box, so its height and anchors don't change.
 Item {
   id: root
 
@@ -16,6 +19,9 @@ Item {
   property string rightText: ""
   property int doneMs: 2500
   property int errorMs: 6000
+  property bool separator: false
+  property int separatorGap: Theme.edge
+  property real separatorStrength: 0.08
 
   function flash(text, kind) {
     root.statusText = text || ""
@@ -29,6 +35,15 @@ Item {
   height: implicitHeight
 
   Timer { id: clearTimer; onTriggered: root.clear() }
+
+  Rectangle {
+    visible: root.separator
+    anchors.bottom: parent.top
+    anchors.bottomMargin: root.separatorGap
+    width: parent.width
+    height: Theme.hairline
+    color: Theme.tint(Theme.fg, root.separatorStrength)
+  }
 
   KeyHints {
     anchors.left: parent.left

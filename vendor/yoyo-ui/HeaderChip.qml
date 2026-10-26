@@ -61,7 +61,7 @@ Rectangle {
     if (root.lit) return chipMouse.containsMouse ? Qt.darker(root.activeFill, 1.08) : root.activeFill
     return chipMouse.containsMouse ? root.hoverFill : root.idleFill
   }
-  border.width: Style.spacing.hairline
+  border.width: Theme.hairline
   border.color: root.lit && root.enabled ? root.activeFill : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
 
   Text {

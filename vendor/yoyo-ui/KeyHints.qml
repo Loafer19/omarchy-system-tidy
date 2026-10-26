@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import qs.Commons
 
@@ -13,17 +15,18 @@ Row {
   Repeater {
     model: root.hints
     Row {
+      id: hint
       required property var modelData
       spacing: Style.space(4)
       Text {
-        text: modelData[0]
+        text: hint.modelData[0]
         color: Theme.dim
         font.family: root.fontFamily
         font.pixelSize: Theme.caption
         font.bold: true
       }
       Text {
-        text: modelData[1]
+        text: hint.modelData[1]
         color: Theme.faint
         font.family: root.fontFamily
         font.pixelSize: Theme.caption

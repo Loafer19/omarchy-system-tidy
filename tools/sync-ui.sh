@@ -28,11 +28,13 @@ manifest() {
 fetch() { # fetch REF DIR -> checks REF out in DIR (needs ui/)
   git clone --quiet --no-checkout -- "$repo" "$2" 2>/dev/null || die "cannot clone $repo"
   git -C "$2" -c advice.detachedHead=false checkout --quiet "$1" 2>/dev/null || die "no such ref: $1"
-  [[ -f "$2/ui/qmldir" ]] || die "$1 has no ui/qmldir"
+  [ -f "$2/ui/qmldir" ] || die "$1 has no ui/qmldir"
 }
 
 check() {
-  [[ -f "$dest/VERSION" ]] && [[ -f "$dest/MANIFEST" ]] || die "vendor/yoyo-ui is missing or was not created by sync-ui.sh"
+  if ! { [ -f "$dest/VERSION" ] && [ -f "$dest/MANIFEST" ]; }; then
+    die "vendor/yoyo-ui is missing or was not created by sync-ui.sh"
+  fi
   if ! diff -u "$dest/MANIFEST" <(manifest "$dest") >&2; then
     die "vendor/yoyo-ui differs from its MANIFEST: it was edited by hand. Change omarchy-yoyo-ui upstream and re-run tools/sync-ui.sh <ref>."
   fi
