@@ -28,7 +28,7 @@ if [[ -n "$qmllint_bin" && -d "$shell_dir/Commons" ]]; then
   mkdir -p "$imports/qs"
   ln -s "$shell_dir/Commons" "$imports/qs/Commons"
   ln -s "$shell_dir/Ui" "$imports/qs/Ui"
-  files=(BarWidget.qml Panel.qml components/*.qml ./*.js)
+  files=(BarWidget.qml Panel.qml Service.qml components/*.qml ./*.js)
   if ! out=$("$qmllint_bin" -I "$imports" -I /usr/lib/qt6/qml "${files[@]}" 2>&1); then status=1; fi
   if grep -q '^Warning' <<<"$out"; then
     printf '%s\n' "$out" >&2

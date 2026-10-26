@@ -77,7 +77,9 @@ omarchy shell shell toggle yoyo.system-tidy
 ```
 
 On several monitors this opens the panel on the focused one. The legacy
-`qs ipc call yoyo.system-tidy toggle` target still works.
+`qs ipc call yoyo.system-tidy toggle` target (also `open` / `close`) still
+works and does the same; it is registered once by the plugin's headless
+service, not by each monitor's bar.
 
 ## Tests
 
