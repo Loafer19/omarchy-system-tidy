@@ -4,6 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 tools/sync-ui.sh --check
+tools/lint.sh
 node tests/model.test.js
 node tests/ui.test.js
 bash tests/backend.sh

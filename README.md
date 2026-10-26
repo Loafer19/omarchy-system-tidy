@@ -82,8 +82,13 @@ On several monitors this opens the panel on the focused one. The legacy
 ## Tests
 
 ```bash
-tests/run.sh   # tools/sync-ui.sh --check + node tests/model.test.js + bash tests/backend.sh
+tests/run.sh
 ```
+
+It runs, in order: `tools/sync-ui.sh --check` (vendored UI untouched),
+`tools/lint.sh` (ShellCheck with `.shellcheckrc` and `qmllint`; each is
+skipped with a note if not installed), the pure-JS tests for `Model.js`,
+`Nav.js` and `Rows.js` (`node tests/*.test.js`) and the backend tests.
 
 The backend tests run against stubbed `pacman`, `expac`, `pkexec`,
 `paccache`, `systemctl`, `docker`, `mise` and `journalctl` in a temporary
